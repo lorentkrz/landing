@@ -1,0 +1,124 @@
+import type { User } from "../types"
+
+export const USERS: User[] = [
+{
+id: "u1",
+firstName: "Arta",
+lastName: "Kryeziu",
+avatar: "https://randomuser.me/api/portraits/women/21.jpg",
+},
+{
+id: "u2",
+firstName: "Elira",
+lastName: "Meta",
+avatar: "https://randomuser.me/api/portraits/women/22.jpg",
+},
+{
+id: "u3",
+firstName: "Gentiana",
+lastName: "Hasani",
+avatar: "https://randomuser.me/api/portraits/women/23.jpg",
+},
+{
+id: "u4",
+firstName: "Flora",
+lastName: "Berisha",
+avatar: "https://randomuser.me/api/portraits/women/24.jpg",
+},
+{
+id: "u5",
+firstName: "Alba",
+lastName: "Dervishi",
+avatar: "https://randomuser.me/api/portraits/women/25.jpg",
+},
+{
+id: "u6",
+firstName: "Nora",
+lastName: "Gashi",
+avatar: "https://randomuser.me/api/portraits/women/26.jpg",
+},
+{
+id: "u7",
+firstName: "Rea",
+lastName: "Tafa",
+avatar: "https://randomuser.me/api/portraits/women/27.jpg",
+},
+{
+id: "u8",
+firstName: "Blerta",
+lastName: "Zeqiri",
+avatar: "https://randomuser.me/api/portraits/women/28.jpg",
+},
+{
+id: "u9",
+firstName: "Vesa",
+lastName: "Nikolla",
+avatar: "https://randomuser.me/api/portraits/women/29.jpg",
+},
+{
+id: "u10",
+firstName: "Jonida",
+lastName: "Lluka",
+avatar: "https://randomuser.me/api/portraits/women/30.jpg",
+},
+{
+id: "u11",
+firstName: "Drilona",
+lastName: "Basha",
+avatar: "https://randomuser.me/api/portraits/women/31.jpg",
+},
+{
+id: "u12",
+firstName: "Erisa",
+lastName: "Deda",
+avatar: "https://randomuser.me/api/portraits/women/32.jpg",
+},
+{
+id: "u13",
+firstName: "Arlinda",
+lastName: "Cana",
+avatar: "https://randomuser.me/api/portraits/women/33.jpg",
+},
+{
+id: "u14",
+firstName: "Linda",
+lastName: "Shala",
+avatar: "https://randomuser.me/api/portraits/women/34.jpg",
+},
+{
+id: "u15",
+firstName: "Anila",
+lastName: "Beqiri",
+avatar: "https://randomuser.me/api/portraits/women/35.jpg",
+},
+{
+id: "u16",
+firstName: "Enxhi",
+lastName: "Mira",
+avatar: "https://randomuser.me/api/portraits/women/36.jpg",
+},
+{
+id: "u17",
+firstName: "Mira",
+lastName: "Rama",
+avatar: "https://randomuser.me/api/portraits/women/37.jpg",
+},
+{
+id: "u18",
+firstName: "Lira",
+lastName: "Hoti",
+avatar: "https://randomuser.me/api/portraits/women/38.jpg",
+},
+{
+id: "u19",
+firstName: "Klea",
+lastName: "Lusha",
+avatar: "https://randomuser.me/api/portraits/women/39.jpg",
+},
+{
+id: "u20",
+firstName: "Ilira",
+lastName: "Peci",
+avatar: "https://randomuser.me/api/portraits/women/40.jpg",
+},
+]

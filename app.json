@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Nata",
+    "slug": "nataapp",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0e17"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0a0e17"
+      },
+      "package": "com.nataapp.lori"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "5d88a233-c4eb-4f7c-9319-34c784ee4c24"
+      }
+    },
+    "owner": "lorentkryeziu"
+  }
+}

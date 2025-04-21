@@ -1,0 +1,178 @@
+export const CONVERSATIONS: Conversation[] = [
+  {
+    id: '1',
+    user: {
+      firstName: 'Arta',
+      lastName: 'Berisha',
+      avatar: 'https://randomuser.me/api/portraits/women/21.jpg',
+      isOnline: true,
+    },
+    lastMessage: 'A je per sonte n’Venom?',
+    isActive: true,
+  },
+  {
+    id: '2',
+    user: {
+      firstName: 'Blerta',
+      lastName: 'Hoxha',
+      avatar: 'https://randomuser.me/api/portraits/women/44.jpg',
+      isOnline: false,
+    },
+    lastMessage: 'Te thashë t’shkojm bashk!',
+    isActive: false,
+  },
+  {
+    id: '3',
+    user: {
+      firstName: 'Dafina',
+      lastName: 'Ismaili',
+      avatar: 'https://randomuser.me/api/portraits/women/50.jpg',
+      isOnline: true,
+    },
+    lastMessage: 'Qa plan ke per vikend?',
+    isActive: true,
+  },
+  {
+    id: '4',
+    user: {
+      firstName: 'Elira',
+      lastName: 'Rama',
+      avatar: 'https://randomuser.me/api/portraits/women/68.jpg',
+      isOnline: true,
+    },
+    lastMessage: 'Kemi me u pa n’ske?',
+    isActive: false,
+  },
+  {
+    id: '5',
+    user: {
+      firstName: 'Flaka',
+      lastName: 'Krasniqi',
+      avatar: 'https://randomuser.me/api/portraits/women/72.jpg',
+      isOnline: true,
+    },
+    lastMessage: 'Po vi me nje shoqe!',
+    isActive: true,
+  },
+  {
+    id: '6',
+    user: {
+      firstName: 'Gentiana',
+      lastName: 'Morina',
+      avatar: 'https://randomuser.me/api/portraits/women/61.jpg',
+      isOnline: false,
+    },
+    lastMessage: 'S’besoj qe dal sonte',
+    isActive: false,
+  },
+  {
+    id: '7',
+    user: {
+      firstName: 'Hana',
+      lastName: 'Musliu',
+      avatar: 'https://randomuser.me/api/portraits/women/15.jpg',
+      isOnline: true,
+    },
+    lastMessage: 'E bona like t’profilit!',
+    isActive: true,
+  },
+  {
+    id: '8',
+    user: {
+      firstName: 'Iliriana',
+      lastName: 'Selimi',
+      avatar: 'https://randomuser.me/api/portraits/women/38.jpg',
+      isOnline: true,
+    },
+    lastMessage: 'Kur t’afrohesh m’njofto',
+    isActive: true,
+  },
+  {
+    id: '9',
+    user: {
+      firstName: 'Jona',
+      lastName: 'Shala',
+      avatar: 'https://randomuser.me/api/portraits/women/11.jpg',
+      isOnline: false,
+    },
+    lastMessage: 'U pame dje?',
+    isActive: false,
+  },
+  {
+    id: '10',
+    user: {
+      firstName: 'Klea',
+      lastName: 'Gashi',
+      avatar: 'https://randomuser.me/api/portraits/women/19.jpg',
+      isOnline: true,
+    },
+    lastMessage: 'Shihemi sonte?',
+    isActive: true,
+  },
+  {
+    id: '11',
+    user: {
+      firstName: 'Lira',
+      lastName: 'Tahiri',
+      avatar: 'https://randomuser.me/api/portraits/women/55.jpg',
+      isOnline: false,
+    },
+    lastMessage: 'Me dërgo screenshot',
+    isActive: false,
+  },
+  {
+    id: '12',
+    user: {
+      firstName: 'Mirjeta',
+      lastName: 'Osmani',
+      avatar: 'https://randomuser.me/api/portraits/women/35.jpg',
+      isOnline: true,
+    },
+    lastMessage: 'Shum cool aplikacion!',
+    isActive: true,
+  },
+  {
+    id: '13',
+    user: {
+      firstName: 'Nora',
+      lastName: 'Dervishi',
+      avatar: 'https://randomuser.me/api/portraits/women/23.jpg',
+      isOnline: true,
+    },
+    lastMessage: 'A ke naj free credit?',
+    isActive: true,
+  },
+  {
+    id: '14',
+    user: {
+      firstName: 'Ornela',
+      lastName: 'Avdijaj',
+      avatar: 'https://randomuser.me/api/portraits/women/42.jpg',
+      isOnline: true,
+    },
+    lastMessage: 'Te pash dje n’Wood!',
+    isActive: true,
+  },
+  {
+    id: '15',
+    user: {
+      firstName: 'Petrit',
+      lastName: 'Hoti',
+      avatar: 'https://randomuser.me/api/portraits/men/27.jpg',
+      isOnline: true,
+    },
+    lastMessage: 'A muj me fol me Hanen?',
+    isActive: false,
+  },
+  {
+    id: '16',
+    user: {
+      firstName: 'Qendresa',
+      lastName: 'Zeqiri',
+      avatar: 'https://randomuser.me/api/portraits/women/29.jpg',
+      isOnline: false,
+    },
+    lastMessage: 'Ndoshta vonohem pak',
+    isActive: true,
+  },
+];
