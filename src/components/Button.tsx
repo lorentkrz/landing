@@ -1,13 +1,14 @@
-import React from 'react';
+import React from "react";
 import {
   TouchableOpacity,
   Text,
   StyleSheet,
   ActivityIndicator,
   ViewStyle,
-  TextStyle
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+  TextStyle,
+} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { palette } from "../constants/theme";
 
 interface ButtonProps {
   title: string;
@@ -26,10 +27,10 @@ interface ButtonProps {
 const Button: React.FC<ButtonProps> = ({
   title,
   onPress,
-  variant = 'primary',
-  size = 'medium',
+  variant = "primary",
+  size = "medium",
   icon,
-  iconPosition = 'left',
+  iconPosition = "left",
   loading = false,
   disabled = false,
   style,
@@ -97,8 +98,8 @@ const Button: React.FC<ButtonProps> = ({
     return textStyleObj;
   };
 
-  const iconSize = size === 'small' ? 16 : size === 'large' ? 24 : 20;
-  const iconColor = variant === 'primary' || variant === 'secondary' ? '#fff' : '#4dabf7';
+  const iconSize = size === "small" ? 16 : size === "large" ? 24 : 20;
+  const iconColor = variant === "primary" || variant === "secondary" ? palette.text : palette.primary;
 
   return (
     <TouchableOpacity
@@ -139,26 +140,26 @@ const Button: React.FC<ButtonProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     borderRadius: 12,
     paddingVertical: 12,
     paddingHorizontal: 16,
   },
   primaryContainer: {
-    backgroundColor: '#4dabf7',
+    backgroundColor: palette.primary,
   },
   secondaryContainer: {
-    backgroundColor: '#1a1f2c',
+    backgroundColor: palette.secondary,
   },
   outlineContainer: {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
     borderWidth: 1,
-    borderColor: '#4dabf7',
+    borderColor: palette.primary,
   },
   ghostContainer: {
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
   smallContainer: {
     paddingVertical: 8,
@@ -171,23 +172,23 @@ const styles = StyleSheet.create({
     borderRadius: 16,
   },
   fullWidth: {
-    width: '100%',
+    width: "100%",
   },
   text: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   primaryText: {
-    color: '#fff',
+    color: palette.text,
   },
   secondaryText: {
-    color: '#fff',
+    color: palette.text,
   },
   outlineText: {
-    color: '#4dabf7',
+    color: palette.primary,
   },
   ghostText: {
-    color: '#4dabf7',
+    color: palette.primary,
   },
   smallText: {
     fontSize: 14,

@@ -1,249 +1,394 @@
-import React, { useState, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  FlatList,
-  Dimensions,
-  Animated,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
-import Button from '../components/Button';
+"use client";
 
-const { width, height } = Dimensions.get('window');
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { Animated, Dimensions, FlatList, ImageBackground, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import Button from "../components/Button";
+import { useAppNavigation } from "../navigation/useAppNavigation";
 
-const ONBOARDING_DATA = [
+const { width } = Dimensions.get("window");
+
+// --- Define Cohesive Colors ---
+const PRIMARY_DARK_COLOR = "#030612";
+const ACCENT_COLOR = "#7ddcff";
+const UNIFIED_BACKGROUND_COLOR = "rgba(255, 255, 255, 0.04)";
+
+// --- SLIDES DATA (MODIFIED: Photo 3 URL changed) ---
+const SLIDES = [
   {
-    id: '1',
-    title: 'Welcome to Nata',
-    description: 'The app that connects you with people at nightlife venues in real-time.',
-    image: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=1740',
-    icon: 'moon',
+    id: "1",
+    title: "The live nightlife feed",
+    description: "See who's lighting up the city right now with heat on the map and live rooms.",
+    image: "https://images.unsplash.com/photo-1464375117522-1311d6a5b81f?q=80&w=1769",
+    icon: "sparkles",
   },
   {
-    id: '2',
-    title: 'Check In at Venues',
-    description: 'Scan the venue QR code to check in and see who else is there.',
-    image: 'https://images.unsplash.com/photo-1566737236500-c8ac43014a67?q=80&w=1740',
-    icon: 'scan',
+    id: "2",
+    title: "Glide through the door",
+    description: "Join guest lists, flash your QR, and skip the chaos when you roll up.",
+    image: "https://images.unsplash.com/photo-1515405295579-ba7b45403062?q=80&w=1740",
+    icon: "scan",
   },
   {
-    id: '3',
-    title: 'Connect with People',
-    description: 'Use credits to start conversations with people at the same venue.',
-    image: 'https://images.unsplash.com/photo-1517457373958-b7bdd4587205?q=80&w=1769',
-    icon: 'people',
+    id: "3",
+    title: "Conversations with a timer",
+    description: "Short, high-intent chats you can extend with credits when the vibe hits.",
+    // --- UPDATED PHOTO 3 ---
+    image: "https://images.unsplash.com/photo-1534349767356-b09e861d9a26?q=80&w=1740", 
+    icon: "chatbubbles",
   },
-  {
-    id: '4',
-    title: 'Timed Chats',
-    description: 'Chats are timed to keep things exciting. Extend them with credits if you want to keep talking.',
-    image: 'https://images.unsplash.com/photo-1578736641330-3155e606cd40?q=80&w=1740',
-    icon: 'time',
-  },
-];
+] as const;
+
+// --- HIGHLIGHTS DATA (RETAINED) ---
+const HIGHLIGHTS = [
+  { icon: "navigate", title: "Live pins", copy: "Map updates in real time as venues go live." },
+  { icon: "flash", title: "Guest list ready", copy: "Keep your QR pass and credits one tap away." },
+  { icon: "chatbubble-ellipses", title: "Social on-fire", copy: "Night-length chats with extensions when you want more." },
+] as const;
 
 const OnboardingScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useAppNavigation();
+  const insets = useSafeAreaInsets();
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollX = useRef(new Animated.Value(0)).current;
-  const flatListRef = useRef<FlatList>(null);
+  const listRef = useRef<FlatList<(typeof SLIDES)[number]>>(null);
+
+  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: Array<{ index?: number }> }) => {
+    if (viewableItems.length && typeof viewableItems[0]?.index === "number") {
+      setCurrentIndex(viewableItems[0]?.index ?? 0);
+    }
+  }, []);
+
+  const paginationDots = useMemo(
+    () =>
+      SLIDES.map((_, index) => {
+        const inputRange = [(index - 1) * width, index * width, (index + 1) * width];
+        const dotWidth = scrollX.interpolate({
+          inputRange,
+          outputRange: [6, 20, 6],
+          extrapolate: "clamp",
+        });
+        const opacity = scrollX.interpolate({
+          inputRange,
+          outputRange: [0.4, 1, 0.4],
+          extrapolate: "clamp",
+        });
+        return <Animated.View key={index.toString()} style={[styles.dot, { width: dotWidth, opacity }]} />;
+      }),
+    [scrollX],
+  );
 
   const handleNext = () => {
-    if (currentIndex < ONBOARDING_DATA.length - 1) {
-      flatListRef.current?.scrollToIndex({
-        index: currentIndex + 1,
-        animated: true,
-      });
+    if (currentIndex < SLIDES.length - 1) {
+      listRef.current?.scrollToIndex({ index: currentIndex + 1, animated: true });
     } else {
-      navigation.navigate('Register' as never);
+      navigation.navigate("Register");
     }
   };
 
-  const handleSkip = () => {
-    navigation.navigate('Register' as never);
-  };
-
-  const renderItem = ({ item, index }: { item: typeof ONBOARDING_DATA[0], index: number }) => {
-    return (
-      <View style={styles.slide}>
-        <View style={styles.imageContainer}>
-          <Image source={{ uri: item.image }} style={styles.image} />
-          <View style={styles.overlay} />
-          <View style={styles.iconContainer}>
-            <Ionicons name={item.icon as any} size={40} color="#fff" />
-          </View>
-        </View>
-        <View style={styles.textContainer}>
-          <Text style={styles.title}>{item.title}</Text>
-          <Text style={styles.description}>{item.description}</Text>
-        </View>
-      </View>
-    );
-  };
-
-  const renderDots = () => {
-    return (
-      <View style={styles.dotsContainer}>
-        {ONBOARDING_DATA.map((_, index) => {
-          const inputRange = [
-            (index - 1) * width,
-            index * width,
-            (index + 1) * width,
-          ];
-
-          const dotWidth = scrollX.interpolate({
-            inputRange,
-            outputRange: [8, 20, 8],
-            extrapolate: 'clamp',
-          });
-
-          const opacity = scrollX.interpolate({
-            inputRange,
-            outputRange: [0.3, 1, 0.3],
-            extrapolate: 'clamp',
-          });
-
-          return (
-            <Animated.View
-              key={index}
-              style={[styles.dot, { width: dotWidth, opacity }]}
-            />
-          );
-        })}
-      </View>
-    );
-  };
+  const handleSkip = () =>
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "Login" }],
+    });
 
   return (
-    <View style={styles.container}>
-      <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
-        <Text style={styles.skipText}>Skip</Text>
-      </TouchableOpacity>
-
-      <FlatList
-        ref={flatListRef}
-        data={ONBOARDING_DATA}
-        renderItem={renderItem}
+    <SafeAreaView style={styles.container} edges={["bottom"]}> 
+      
+      <Animated.FlatList
+        ref={listRef}
+        data={SLIDES}
         keyExtractor={(item) => item.id}
         horizontal
         pagingEnabled
         showsHorizontalScrollIndicator={false}
-        onScroll={Animated.event(
-          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-          { useNativeDriver: false }
+        bounces={false}
+        style={styles.carousel}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: scrollX } } }], {
+          useNativeDriver: false,
+        })}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={{ viewAreaCoveragePercentThreshold: 65 }}
+        renderItem={({ item, index }) => (
+          <View style={styles.slideWrapper}> 
+            <ImageBackground 
+              source={{ uri: item.image }} 
+              style={styles.slide} 
+              resizeMode="cover"
+              imageStyle={{ top: -30 }} 
+            >
+              
+              <LinearGradient 
+                colors={[
+                  "rgba(3,6,18,0.0)", 
+                  "rgba(3,6,18,0.2)", 
+                  "rgba(3,6,18,0.78)", 
+                  PRIMARY_DARK_COLOR
+                ]} 
+                locations={[0.0, 0.4, 0.7, 1.0]} 
+                style={styles.overlay} 
+              />
+              
+              <View style={styles.slideContent}>
+                <View style={styles.slideTopRow}>
+                  <View style={styles.stepPill}>
+                    <Text style={styles.stepPillText}>{`0${index + 1} / 0${SLIDES.length}`}</Text>
+                  </View>
+                  <View style={styles.iconBadge}>
+                    <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={28} color={ACCENT_COLOR} />
+                  </View>
+                </View>
+                <Text style={styles.eyebrow}>Nightlife, live and moving</Text>
+                <Text style={styles.slideTitle}>{item.title}</Text>
+                <Text style={styles.slideDescription}>{item.description}</Text>
+                <View style={styles.slideMetaRow}>
+                  <Ionicons name="moon" size={16} color={ACCENT_COLOR} />
+                  <Text style={styles.slideMetaText}>Built for after dark</Text>
+                </View>
+              </View>
+            </ImageBackground>
+
+            {/* HEADER OVERLAY: Badge Removed */}
+            {index === currentIndex && (
+                <View style={[styles.headerOverlay, { paddingTop: Math.max(insets.top, 16), justifyContent: 'flex-end' }]}>
+                    {/* BRAND BADGE REMOVED */}
+                    <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+                        <Text style={styles.skipText}>Skip</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+            
+          </View>
         )}
-        onMomentumScrollEnd={(event) => {
-          const index = Math.round(event.nativeEvent.contentOffset.x / width);
-          setCurrentIndex(index);
-        }}
-        scrollEventThrottle={16}
       />
 
-      {renderDots()}
+      {/* UNIFIED LOWER SECTION */}
+      <View style={styles.unifiedLowerSection}>
+        <View style={styles.dotsRow}>{paginationDots}</View>
 
-      <View style={styles.footer}>
-        <Button
-          title={currentIndex === ONBOARDING_DATA.length - 1 ? "Get Started" : "Next"}
-          icon="arrow-forward"
-          iconPosition="right"
-          onPress={handleNext}
-          style={styles.nextButton}
-          fullWidth
-        />
+        <View style={styles.highlightRow}>
+          {HIGHLIGHTS.map((item) => (
+            <LinearGradient
+              key={item.title}
+              colors={["rgba(125,220,255,0.16)", "rgba(255,255,255,0.02)"]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.highlightCard}
+            >
+              <View style={styles.highlightIconBadge}>
+                <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={18} color={PRIMARY_DARK_COLOR} />
+              </View>
+              <Text style={styles.highlightTitle}>{item.title}</Text>
+              <Text style={styles.highlightCopy}>{item.copy}</Text>
+            </LinearGradient>
+          ))}
+        </View>
 
-        {currentIndex === ONBOARDING_DATA.length - 1 && (
-          <TouchableOpacity style={styles.loginLink} onPress={() => navigation.navigate('Login' as never)}>
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom + 16, 32) }]}>
+          <Button
+            title={currentIndex === SLIDES.length - 1 ? "Create account" : "Next"}
+            icon="arrow-forward"
+            iconPosition="right"
+            onPress={handleNext}
+            fullWidth
+            style={styles.ctaButton}
+            textStyle={styles.ctaButtonText}
+          />
+          <TouchableOpacity style={styles.loginLink} onPress={handleSkip}>
             <Text style={styles.loginText}>Already have an account? Login</Text>
           </TouchableOpacity>
-        )}
+        </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0a0e17",
+    backgroundColor: PRIMARY_DARK_COLOR,
   },
-  skipButton: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    zIndex: 10,
+  carousel: {
+    flex: 1, 
   },
-  skipText: {
-    color: '#aaa',
-    fontSize: 16,
+  slideWrapper: {
+    width,
+    flex: 1, 
+    position: 'relative',
   },
   slide: {
     width,
-    height,
-  },
-  imageContainer: {
-    width,
-    height: height * 0.6,
-    position: 'relative',
-  },
-  image: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
+    height: "100%", 
+    justifyContent: "flex-end",
+    backgroundColor: PRIMARY_DARK_COLOR,
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.3)',
   },
-  iconContainer: {
+  slideContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 20,
+  },
+  
+  unifiedLowerSection: {
+    backgroundColor: UNIFIED_BACKGROUND_COLOR, 
+    paddingTop: 10, 
+  },
+  
+  // --- HEADER OVERLAY ---
+  headerOverlay: {
     position: 'absolute',
-    top: 50,
-    left: 20,
-  },
-  textContainer: {
+    top: 0,
+    left: 0,
+    right: 0,
     paddingHorizontal: 20,
-    paddingTop: 20,
+    flexDirection: "row",
+    // ADJUSTED: Only flex-end needed now that the badge is gone
+    justifyContent: "flex-end", 
+    alignItems: "center",
+    zIndex: 10,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 10,
+  skipButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.15)",
   },
-  description: {
-    fontSize: 16,
-    color: '#aaa',
-    lineHeight: 24,
+  skipText: {
+    color: "#fff",
+    fontWeight: "700",
+    letterSpacing: 0.4,
   },
-  dotsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    height: 40,
+  slideTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between", 
+    marginBottom: 16,
+  },
+  stepPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.12)",
+    backgroundColor: "rgba(3,6,18,0.4)",
+  },
+  stepPillText: {
+    color: "#d7e4ff",
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    fontSize: 12,
+  },
+  iconBadge: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    backgroundColor: "rgba(125,220,255,0.18)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: 'rgba(125,220,255,0.3)',
+  },
+  eyebrow: {
+    color: ACCENT_COLOR,
+    fontSize: 14,
+    letterSpacing: 1.5,
+    textTransform: "uppercase",
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  slideTitle: {
+    color: "#fff",
+    fontSize: 40,
+    fontWeight: "900",
+    letterSpacing: 0.5,
+    lineHeight: 48,
+  },
+  slideDescription: {
+    color: "#c2c7dc",
+    marginTop: 18,
+    fontSize: 17,
+    lineHeight: 26,
+  },
+  slideMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 18,
+  },
+  slideMetaText: {
+    color: "#c2d5ff",
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  dotsRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 2,
+    gap: 8,
   },
   dot: {
-    width: 8,
     height: 8,
-    borderRadius: 4,
-    backgroundColor: '#fff',
-    marginHorizontal: 5,
+    borderRadius: 999,
+    backgroundColor: ACCENT_COLOR,
+  },
+  highlightRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 20,
+    marginTop: 16,
+  },
+  highlightCard: {
+    flex: 1,
+    borderRadius: 18,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(255,255,255,0.04)",
+  },
+  highlightIconBadge: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: ACCENT_COLOR,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  highlightTitle: {
+    color: "#fff",
+    fontWeight: "800",
+    fontSize: 16,
+  },
+  highlightCopy: {
+    color: "#a7b3d9",
+    fontSize: 13,
+    marginTop: 8,
+    lineHeight: 20,
   },
   footer: {
     paddingHorizontal: 20,
-    paddingBottom: 30,
+    gap: 14,
+    paddingTop: 18,
   },
-  nextButton: {
-    marginBottom: 10,
+  ctaButton: {
+    backgroundColor: ACCENT_COLOR, 
+  },
+  ctaButtonText: {
+    fontWeight: '800',
+    color: PRIMARY_DARK_COLOR,
   },
   loginLink: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   loginText: {
-    color: '#aaa',
-    fontSize: 16,
+    color: "#9aa3c3",
+    fontWeight: "600",
   },
 });
 

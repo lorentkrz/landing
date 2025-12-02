@@ -12,12 +12,12 @@ import {
   Platform,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import { useNavigation } from "@react-navigation/native"
 import Button from "../components/Button"
 import { useAuth } from "../context/AuthContext"
+import { useAppNavigation } from "../navigation/useAppNavigation"
 
 const ChangePasswordScreen = () => {
-  const navigation = useNavigation()
+  const navigation = useAppNavigation()
   const { updatePassword } = useAuth()
 
   const [currentPassword, setCurrentPassword] = useState("")

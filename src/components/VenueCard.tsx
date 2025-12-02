@@ -1,7 +1,10 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, Dimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { Venue } from '../types';
+"use client";
+
+import React from "react";
+import { ImageBackground, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import type { Venue } from "../types";
 
 interface VenueCardProps {
   venue: Venue;
@@ -10,148 +13,183 @@ interface VenueCardProps {
   compact?: boolean;
 }
 
-const { width } = Dimensions.get('window');
-const cardWidth = width * 0.44;
-
 const VenueCard: React.FC<VenueCardProps> = ({ venue, onPress, style, compact = false }) => {
+  const displayDistance =
+    typeof venue.distanceKm === "number"
+      ? venue.distanceKm < 1
+        ? `${Math.round(venue.distanceKm * 1000)} m`
+        : `${venue.distanceKm.toFixed(1)} km`
+      : venue.distance || null;
+
   return (
     <TouchableOpacity
+      activeOpacity={0.9}
       style={[styles.container, compact ? styles.compactContainer : {}, style]}
       onPress={() => onPress(venue)}
-      activeOpacity={0.8}
     >
-      <Image source={{ uri: venue.imageUrl }} style={styles.image} />
+      <ImageBackground
+        source={{ uri: venue.image }}
+        style={styles.image}
+        imageStyle={styles.imageBorder}
+        resizeMode="cover"
+      >
+        <LinearGradient colors={["rgba(0,0,0,0.15)", "rgba(0,0,0,0.85)"]} style={styles.overlay} />
 
-      {venue.isCheckedIn && (
-        <View style={styles.checkedInBadge}>
-          <Ionicons name="checkmark-circle" size={16} color="#fff" />
-          <Text style={styles.checkedInText}>Checked In</Text>
-        </View>
-      )}
-      <View style={styles.content}>
-        <Text style={styles.name} numberOfLines={1}>{venue.name}</Text>
-        <View style={styles.infoRow}>
-          <Text style={styles.type}>{venue.category}</Text>
-          {!compact && (
-            <>
-              <Text style={styles.dot}>•</Text>
-              <View style={styles.ratingContainer}>
-                <Ionicons name="star" size={12} color="#FFD700" />
-                <Text style={styles.rating}>{venue.rating ?? '4.5'}</Text>
-              </View>
-            </>
-          )}
-        </View>
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Ionicons name="people-outline" size={14} color="#fff" />
-            <Text style={styles.statText}>{venue.activeUsers}</Text>
+        <View style={styles.topRow}>
+          <View style={styles.typeBadge}>
+            <Ionicons name="sparkles" size={12} color="#fff" />
+            <Text style={styles.typeText}>{venue.type}</Text>
           </View>
-          {!compact && venue.distance && (
-            <View style={styles.stat}>
-              <Ionicons name="location-outline" size={14} color="#fff" />
-              <Text style={styles.statText}>{venue.distance}</Text>
+          {displayDistance && (
+            <View style={styles.distanceBadge}>
+              <Ionicons name="location-outline" size={12} color="#fff" />
+              <Text style={styles.distanceText}>{displayDistance}</Text>
             </View>
           )}
         </View>
-      </View>
+
+        {venue.isCheckedIn && (
+          <View style={styles.checkedInBadge}>
+            <Ionicons name="checkmark-circle" size={14} color="#fff" />
+            <Text style={styles.checkedInText}>You're inside</Text>
+          </View>
+        )}
+
+        <View style={styles.bottomContent}>
+          <Text style={[styles.name, compact && styles.compactName]} numberOfLines={1}>
+            {venue.name}
+          </Text>
+          {!compact && (
+            <Text style={styles.description} numberOfLines={1}>
+              {venue.city} • {venue.country}
+            </Text>
+          )}
+
+          <View style={styles.metaRow}>
+            <View style={styles.metaPill}>
+              <Ionicons name="people-outline" size={12} color="#fff" />
+              <Text style={styles.metaText}>{venue.activeUsers} inside</Text>
+            </View>
+            <View style={styles.metaPill}>
+              <Ionicons name="star" size={12} color="#ffd479" />
+              <Text style={styles.metaText}>{venue.rating.toFixed(1)}</Text>
+            </View>
+          </View>
+        </View>
+      </ImageBackground>
     </TouchableOpacity>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    width: cardWidth,
-    height: 180,
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: 16,
-    backgroundColor: '#1a1f2c',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    width: 220,
+    height: 260,
+    borderRadius: 22,
+    overflow: "hidden",
   },
   compactContainer: {
-    width: 140,
-    height: 160,
-    marginRight: 12,
+    width: "100%",
+    height: 220,
   },
   image: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover',
-    position: 'absolute',
+    flex: 1,
   },
-  checkedInBadge: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    backgroundColor: '#4dabf7',
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
+  imageBorder: {
+    borderRadius: 22,
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 22,
+  },
+  topRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    padding: 14,
     zIndex: 2,
   },
-  checkedInText: {
-    color: '#fff',
-    fontSize: 10,
-    fontWeight: '600',
-    marginLeft: 4,
+  typeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
   },
-  content: {
-    position: 'absolute',
+  typeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  distanceBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+  },
+  distanceText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  checkedInBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "#4dabf7",
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  checkedInText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  bottomContent: {
+    position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    padding: 12,
-    zIndex: 2,
+    padding: 16,
+    gap: 6,
   },
   name: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-    marginBottom: 4,
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "700",
   },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
+  compactName: {
+    fontSize: 18,
   },
-  type: {
-    color: '#ddd',
+  description: {
+    color: "#d3d9ff",
+    fontSize: 13,
+  },
+  metaRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginTop: 4,
+  },
+  metaPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(0,0,0,0.35)",
+  },
+  metaText: {
+    color: "#fff",
     fontSize: 12,
-  },
-  dot: {
-    color: '#ddd',
-    fontSize: 12,
-    marginHorizontal: 4,
-  },
-  ratingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  rating: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 2,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  stat: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  statText: {
-    color: '#fff',
-    fontSize: 12,
-    marginLeft: 4,
   },
 });
 

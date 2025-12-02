@@ -1,271 +1,255 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  TextInput,
-  Linking,
-} from "react-native"
-import { Ionicons } from "@expo/vector-icons"
-import { useNavigation } from "@react-navigation/native"
+import React, { useMemo, useState } from "react";
+import { Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import Button from "../components/Button";
+import { useAppNavigation } from "../navigation/useAppNavigation";
 
-const FAQItem = ({ question, answer, isOpen, onToggle }) => {
-  return (
-    <View style={styles.faqItem}>
-      <TouchableOpacity style={styles.faqQuestion} onPress={onToggle}>
-        <Text style={styles.questionText}>{question}</Text>
-        <Ionicons
-          name={isOpen ? "chevron-up" : "chevron-down"}
-          size={20}
-          color="#aaa"
-        />
-      </TouchableOpacity>
-      {isOpen && (
-        <View style={styles.faqAnswer}>
-          <Text style={styles.answerText}>{answer}</Text>
-        </View>
-      )}
-    </View>
-  )
-}
+const FAQS = [
+  {
+    id: 1,
+    question: "How do credits work?",
+    answer:
+      "Credits power everything in Nataa. Use them to start chats, boost your profile, or extend conversations. Buy them directly from the Credits screen.",
+  },
+  {
+    id: 2,
+    question: "How do I change my password?",
+    answer: "Go to Profile → Account → Change Password to update your credentials securely.",
+  },
+  {
+    id: 3,
+    question: "What are check-ins?",
+    answer: "Scan the venue QR code to check in. Once checked in, you unlock the live guest list for that venue for a limited time.",
+  },
+  {
+    id: 4,
+    question: "How do I report a user?",
+    answer: "Open their profile, tap the more icon, and choose Report. For urgent issues, contact support directly.",
+  },
+] as const;
+
+const quickActions = [
+  { icon: "flash-outline", label: "Credits help", link: "mailto:support@nata.app?subject=Credits" },
+  { icon: "shield-checkmark-outline", label: "Safety tips", link: "https://nata.app/safety" },
+  { icon: "chatbubbles-outline", label: "Live chat", link: "mailto:support@nata.app?subject=Live%20support" },
+] as const;
 
 const HelpCenterScreen = () => {
-  const navigation = useNavigation()
-  const [searchQuery, setSearchQuery] = useState("")
-  const [openFAQ, setOpenFAQ] = useState(null)
+  const navigation = useAppNavigation();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [openFAQ, setOpenFAQ] = useState<number | null>(null);
 
-  const faqs = [
-    {
-      id: 1,
-      question: "How do credits work?",
-      answer: "Credits are used to unlock premium features in the app. You can use them to boost your profile visibility, send special messages, and access exclusive venues. Credits can be purchased in the Credits section of your profile.",
-    },
-    {
-      id: 2,
-      question: "How do I change my password?",
-      answer: "To change your password, go to your Profile, tap on Settings, then select 'Change Password'. You'll need to enter your current password and then your new password twice to confirm.",
-    },
-    {
-      id: 3,
-      question: "How do I delete my account?",
-      answer: "To delete your account, go to your Profile, tap on Settings, and scroll down to find the 'Delete Account' option. Please note that account deletion is permanent and cannot be undone.",
-    },
-    {
-      id: 4,
-      question: "What are check-ins?",
-      answer: "Check-ins allow you to mark your presence at a venue. When you check in, other users at the same venue can see you and connect with you. Check-ins expire after 24 hours.",
-    },
-    {
-      id: 5,
-      question: "How do I report inappropriate behavior?",
-      answer: "If you encounter inappropriate behavior, you can report a user by visiting their profile, tapping the three dots in the top right corner, and selecting 'Report User'. You can also contact our support team directly for urgent issues.",
-    },
-  ]
-
-  const filteredFAQs = searchQuery
-    ? faqs.filter(
-        (faq) =>
-          faq.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          faq.answer.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : faqs
-
-  const toggleFAQ = (id) => {
-    setOpenFAQ(openFAQ === id ? null : id)
-  }
-
-  const handleContactSupport = () => {
-    Linking.openURL("mailto:support@nata.app?subject=Support%20Request")
-  }
+  const filteredFaqs = useMemo(() => {
+    if (!searchQuery) return FAQS;
+    const q = searchQuery.toLowerCase();
+    return FAQS.filter((faq) => faq.question.toLowerCase().includes(q) || faq.answer.toLowerCase().includes(q));
+  }, [searchQuery]);
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Help Center</Text>
-        <View style={styles.placeholder} />
-      </View>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={20} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Help Center</Text>
+          <View style={{ width: 40 }} />
+        </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <LinearGradient colors={["#1c1f3f", "#080a16"]} style={styles.hero}>
+          <View>
+            <Text style={styles.heroTitle}>Need help?</Text>
+            <Text style={styles.heroSubtitle}>Search FAQs, contact support, or report an issue.</Text>
+          </View>
+          <Ionicons name="help-circle-outline" size={36} color="#fff" />
+        </LinearGradient>
+
         <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color="#aaa" style={styles.searchIcon} />
+          <Ionicons name="search" size={18} color="#8e95bd" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search for help..."
-            placeholderTextColor="#aaa"
+            placeholder="Search help articles"
+            placeholderTextColor="#8e95bd"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
-          {searchQuery ? (
-            <TouchableOpacity style={styles.clearButton} onPress={() => setSearchQuery("")}>
-              <Ionicons name="close-circle" size={20} color="#aaa" />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery("")}>
+              <Ionicons name="close-circle" size={18} color="#8e95bd" />
             </TouchableOpacity>
-          ) : null}
+          )}
         </View>
 
-        <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
+        <View style={styles.quickRow}>
+          {quickActions.map((action) => (
+            <TouchableOpacity key={action.label} style={styles.quickCard} onPress={() => Linking.openURL(action.link)}>
+              <Ionicons name={action.icon as keyof typeof Ionicons.glyphMap} size={20} color="#fff" />
+              <Text style={styles.quickText}>{action.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
-        {filteredFAQs.length > 0 ? (
-          <View style={styles.faqContainer}>
-            {filteredFAQs.map((faq) => (
-              <FAQItem
-                key={faq.id}
-                question={faq.question}
-                answer={faq.answer}
-                isOpen={openFAQ === faq.id}
-                onToggle={() => toggleFAQ(faq.id)}
-              />
-            ))}
-          </View>
+        <Text style={styles.sectionTitle}>Frequently asked</Text>
+        {filteredFaqs.length ? (
+          filteredFaqs.map((faq) => (
+            <View key={faq.id} style={styles.faqItem}>
+              <TouchableOpacity style={styles.faqHeader} onPress={() => setOpenFAQ(openFAQ === faq.id ? null : faq.id)}>
+                <Text style={styles.faqQuestion}>{faq.question}</Text>
+                <Ionicons name={openFAQ === faq.id ? "chevron-up" : "chevron-down"} size={18} color="#9aa3c3" />
+              </TouchableOpacity>
+              {openFAQ === faq.id && <Text style={styles.faqAnswer}>{faq.answer}</Text>}
+            </View>
+          ))
         ) : (
-          <Text style={styles.noResultsText}>No results found for "{searchQuery}"</Text>
+          <Text style={styles.emptyFaq}>No results for “{searchQuery}”. Try another keyword.</Text>
         )}
 
-        <View style={styles.supportSection}>
-          <Text style={styles.supportTitle}>Need more help?</Text>
-          <Text style={styles.supportText}>
-            Our support team is available 24/7 to assist you with any questions or issues you may have.
-          </Text>
-          <TouchableOpacity style={styles.contactButton} onPress={handleContactSupport}>
-            <Ionicons name="mail-outline" size={20} color="#fff" style={styles.contactIcon} />
-            <Text style={styles.contactText}>Contact Support</Text>
-          </TouchableOpacity>
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Need more help?</Text>
+          <Text style={styles.sectionBody}>Can't find what you're looking for? Email us and we’ll respond within 24 hours.</Text>
+          <Button
+            title="Contact support"
+            icon="mail-outline"
+            onPress={() => Linking.openURL("mailto:support@nata.app?subject=Support%20Request")}
+            style={styles.supportButton}
+          />
         </View>
       </ScrollView>
-    </View>
-  )
-}
+    </SafeAreaView>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0a0e17",
+    backgroundColor: "#03050f",
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 15,
-    paddingTop: 60,
-    paddingBottom: 15,
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 6,
   },
   backButton: {
-    padding: 5,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#151936",
+    justifyContent: "center",
+    alignItems: "center",
   },
-  headerTitle: {
+  title: {
     color: "#fff",
     fontSize: 20,
     fontWeight: "700",
   },
-  placeholder: {
-    width: 24,
+  hero: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 24,
+    padding: 20,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
-  content: {
-    flex: 1,
-    paddingHorizontal: 15,
+  heroTitle: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "700",
+  },
+  heroSubtitle: {
+    color: "#c6cbe3",
+    marginTop: 6,
   },
   searchContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderRadius: 8,
-    paddingHorizontal: 15,
-    marginVertical: 20,
-  },
-  searchIcon: {
-    marginRight: 10,
+    backgroundColor: "#11162b",
+    borderRadius: 16,
+    marginHorizontal: 20,
+    marginTop: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
-    paddingVertical: 12,
     color: "#fff",
-    fontSize: 16,
   },
-  clearButton: {
-    padding: 5,
+  quickRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginHorizontal: 20,
+    marginTop: 16,
+  },
+  quickCard: {
+    flex: 1,
+    borderRadius: 16,
+    backgroundColor: "#0f1425",
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.04)",
+  },
+  quickText: {
+    color: "#fff",
+    fontSize: 13,
+    textAlign: "center",
   },
   sectionTitle: {
     color: "#fff",
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 20,
-  },
-  faqContainer: {
-    marginBottom: 30,
+    marginTop: 24,
+    paddingHorizontal: 20,
   },
   faqItem: {
-    marginBottom: 10,
-    backgroundColor: "#1a1f2c",
-    borderRadius: 8,
-    overflow: "hidden",
+    marginHorizontal: 20,
+    backgroundColor: "#101632",
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 12,
   },
-  faqQuestion: {
+  faqHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 15,
   },
-  questionText: {
+  faqQuestion: {
     color: "#fff",
-    fontSize: 16,
     fontWeight: "600",
     flex: 1,
+    marginRight: 12,
   },
   faqAnswer: {
-    padding: 15,
-    paddingTop: 0,
-  },
-  answerText: {
-    color: "#aaa",
-    fontSize: 14,
+    color: "#c5caea",
+    marginTop: 8,
     lineHeight: 20,
   },
-  noResultsText: {
-    color: "#aaa",
-    fontSize: 14,
-    textAlign: "center",
-    marginVertical: 20,
+  emptyFaq: {
+    color: "#8e95bd",
+    paddingHorizontal: 20,
+    marginTop: 12,
   },
-  supportSection: {
-    backgroundColor: "#1a1f2c",
-    borderRadius: 12,
-    padding: 20,
-    marginBottom: 30,
+  section: {
+    marginTop: 30,
+    paddingHorizontal: 20,
   },
-  supportTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 10,
-  },
-  supportText: {
-    color: "#aaa",
-    fontSize: 14,
+  sectionBody: {
+    color: "#c5caea",
+    marginTop: 6,
     lineHeight: 20,
-    marginBottom: 20,
   },
-  contactButton: {
-    backgroundColor: "#4dabf7",
-    borderRadius: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 12,
+  supportButton: {
+    marginTop: 16,
   },
-  contactIcon: {
-    marginRight: 8,
-  },
-  contactText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-})
+});
 
-export default HelpCenterScreen
+export default HelpCenterScreen;

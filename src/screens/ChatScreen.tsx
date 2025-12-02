@@ -1,249 +1,238 @@
-import React, { useState, useEffect, useRef } from 'react';
+"use client";
+
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  TouchableOpacity,
+  Alert,
   FlatList,
   KeyboardAvoidingView,
   Platform,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
   Image,
-  Alert,
-} from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useRoute, useNavigation } from '@react-navigation/native';
-import Header from '../components/Header';
-import { useCredits } from '../context/CreditsContext';
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { useRoute } from "@react-navigation/native";
+import { useCredits } from "../context/CreditsContext";
+import { useAuth } from "../context/AuthContext";
+import { supabase } from "../lib/supabase";
+import { useAppNavigation } from "../navigation/useAppNavigation";
+import Button from "../components/Button";
+import { track } from "../utils/analytics";
 
-interface Message {
+type MessageItem = {
   id: string;
   text: string;
   isUser: boolean;
   timestamp: Date;
-}
+  status?: "sent" | "delivered" | "read";
+};
 
 const ChatScreen = () => {
+  const navigation = useAppNavigation();
   const route = useRoute();
-  const navigation = useNavigation();
-  const { useCredit } = useCredits();
+  const { spendCredits } = useCredits();
+  const { user } = useAuth();
 
-  const { userId, userName, userAvatar, isNewChat, conversationId } = route.params as {
+  const { conversationId, userId, userName, userAvatar } = route.params as {
+    conversationId: string;
     userId: string;
     userName: string;
     userAvatar: string;
-    isNewChat?: boolean;
-    conversationId?: string;
   };
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState('');
-  const [timeRemaining, setTimeRemaining] = useState(100); // 100 seconds
-  const [isTimerActive, setIsTimerActive] = useState(true);
+  const [messages, setMessages] = useState<MessageItem[]>([]);
+  const [inputText, setInputText] = useState("");
+  const [timeRemaining, setTimeRemaining] = useState(100);
   const [isExtending, setIsExtending] = useState(false);
-  const [hasCreditsAvailable, setHasCreditsAvailable] = useState(false);
-
+  const [isTyping, setIsTyping] = useState(false);
+  const typingTimer = useRef<NodeJS.Timeout | null>(null);
   const flatListRef = useRef<FlatList>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    const checkCredits = async () => {
-      setHasCreditsAvailable(await useCredit());
+    const loadMessages = async () => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("conversation_id", conversationId)
+        .order("sent_at", { ascending: true });
+      if (!error && data) {
+        setMessages(
+          data.map((msg) => ({
+            id: msg.id,
+            text: msg.body,
+            isUser: msg.sender_id === user?.id,
+            timestamp: new Date(msg.sent_at),
+            status: msg.sender_id === user?.id ? "delivered" : "read",
+          })),
+        );
+      }
     };
-    checkCredits();
-  }, [useCredit]);
+
+    const channel = supabase
+      .channel(`public:messages:${conversationId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
+        (payload) => {
+          const newMsg = payload.new as any;
+          setMessages((prev) => [
+            ...prev,
+            {
+            id: newMsg.id,
+            text: newMsg.body,
+            isUser: newMsg.sender_id === user?.id,
+            timestamp: new Date(newMsg.sent_at),
+            status: newMsg.sender_id === user?.id ? "delivered" : "read",
+          },
+        ]);
+      },
+      )
+      .subscribe();
+
+    loadMessages();
+    return () => {
+      channel.unsubscribe();
+    };
+  }, [conversationId, user?.id]);
 
   useEffect(() => {
-    if (isNewChat) {
-      setMessages([{
-        id: '1',
-        text: `Hi! I'm ${userName.split(' ')[0]}. Nice to connect with you!`,
-        isUser: false,
-        timestamp: new Date(),
-      }]);
-    } else {
-      setMessages([
-        {
-          id: '1',
-          text: `Hi! I'm ${userName.split(' ')[0]}. Nice to connect with you!`,
-          isUser: false,
-          timestamp: new Date(Date.now() - 60000),
-        },
-        {
-          id: '2',
-          text: 'Hey there! Nice to meet you too. Are you enjoying the venue?',
-          isUser: true,
-          timestamp: new Date(Date.now() - 50000),
-        },
-        {
-          id: '3',
-          text: 'Yes, it\'s amazing! The music is great. What brings you here tonight?',
-          isUser: false,
-          timestamp: new Date(Date.now() - 40000),
-        },
-      ]);
-    }
-
-    startTimer();
+    timerRef.current = setInterval(() => {
+      setTimeRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timerRef.current!);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
     return () => {
       if (timerRef.current) {
         clearInterval(timerRef.current);
       }
     };
-  }, [isNewChat, userName]);
+  }, []);
 
-  const startTimer = () => {
-    setIsTimerActive(true);
+  const formatTime = useMemo(() => {
+    return `${Math.floor(timeRemaining / 60)}:${`0${timeRemaining % 60}`.slice(-2)}`;
+  }, [timeRemaining]);
 
-    timerRef.current = setInterval(() => {
-      setTimeRemaining(prev => {
-        if (prev <= 1) {
-          clearInterval(timerRef.current!);
-          setIsTimerActive(false);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-  };
-
-  const handleSend = () => {
-    if (!inputText.trim()) return;
-
-    const newMessage: Message = {
-      id: Date.now().toString(),
-      text: inputText.trim(),
-      isUser: true,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, newMessage]);
-    setInputText('');
-
-    setTimeout(() => {
-      const replies = [
-        'That sounds interesting!',
-        'I agree with you.',
-        'What do you think about the music?',
-        'Have you been to this place before?',
-        'Would you like to grab a drink?',
-      ];
-
-      const replyMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: replies[Math.floor(Math.random() * replies.length)],
-        isUser: false,
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, replyMessage]);
-    }, 1000 + Math.random() * 2000);
+  const handleSend = async () => {
+    if (!inputText.trim() || !user?.id) return;
+    const text = inputText.trim();
+    setInputText("");
+    const tempId = Date.now().toString();
+    setMessages((prev) => [...prev, { id: tempId, text, isUser: true, timestamp: new Date(), status: "sent" }]);
+    const { error } = await supabase.from("messages").insert({
+      conversation_id: conversationId,
+      sender_id: user.id,
+      receiver_id: userId,
+      body: text,
+    });
+    if (error) {
+      Alert.alert("Failed to send", "Please try again.");
+      return;
+    }
+    setMessages((prev) =>
+      prev.map((msg) => (msg.id === tempId ? { ...msg, status: "delivered" } : msg)),
+    );
+    track("message_send", { conversationId, targetUser: userId });
   };
 
   const handleExtendTime = async () => {
     setIsExtending(true);
-
     try {
-      if (hasCreditsAvailable) {
-        setTimeRemaining(prev => prev + 100);
-
-        if (!isTimerActive) {
-          startTimer();
-        }
-
-        const systemMessage: Message = {
-          id: Date.now().toString(),
-          text: 'Chat time extended by 100 seconds.',
-          isUser: true,
-          timestamp: new Date(),
-        };
-
-        setMessages(prev => [...prev, systemMessage]);
-      } else {
-        Alert.alert(
-          'Insufficient Credits',
-          'You need 1 credit to extend the chat. Would you like to purchase more credits?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Buy Credits', onPress: () => navigation.navigate('Credits' as never) }
-          ]
-        );
+      const success = await spendCredits(1, "Chat extension");
+      if (!success) {
+        Alert.alert("Need credits", "Add credits to extend this chat.", [
+          { text: "Cancel", style: "cancel" },
+          { text: "Buy credits", onPress: () => navigation.navigate("Credits") },
+        ]);
+        return;
       }
+      setTimeRemaining((prev) => prev + 60);
     } finally {
       setIsExtending(false);
     }
   };
 
-  const renderMessage = ({ item }: { item: Message }) => {
-    const isSystem = item.text.includes('Chat time extended');
-
-    if (isSystem) {
-      return (
-        <View style={styles.systemMessageContainer}>
-          <Text style={styles.systemMessageText}>{item.text}</Text>
+  const renderMessage = ({ item }: { item: MessageItem }) => (
+    <View style={[styles.bubbleRow, item.isUser ? styles.bubbleRowUser : styles.bubbleRowOther]}>
+      {!item.isUser && <Image source={{ uri: userAvatar }} style={styles.avatar} />}
+      <View style={[styles.messageBubble, item.isUser ? styles.bubbleUser : styles.bubbleOther]}>
+        <Text style={styles.messageText}>{item.text}</Text>
+        <View style={styles.metaRow}>
+          <Text style={styles.messageTime}>{item.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</Text>
+          {item.isUser && (
+            <View style={styles.statusPill}>
+              <Ionicons
+                name={item.status === "read" ? "checkmark-done" : "checkmark"}
+                size={12}
+                color={item.status === "read" ? "#b8f7ff" : "#d7e7ff"}
+              />
+              <Text style={styles.statusText}>{item.status ?? "sent"}</Text>
+            </View>
+          )}
         </View>
-      );
-    }
-
-    return (
-      <View style={[styles.messageContainer, item.isUser ? styles.userMessageContainer : styles.otherMessageContainer]}>
-        {!item.isUser && <Image source={{ uri: userAvatar }} style={styles.avatar} />}
-        <View style={[styles.messageBubble, item.isUser ? styles.userMessageBubble : styles.otherMessageBubble]}>
-          <Text style={styles.messageText}>{item.text}</Text>
-          <Text style={styles.messageTime}>
-            {item.timestamp.getHours()}:{item.timestamp.getMinutes().toString().padStart(2, '0')}
-          </Text>
-        </View>
-        {item.isUser && <View style={styles.avatarPlaceholder} />}
       </View>
-    );
-  };
+    </View>
+  );
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-    >
-      <Header title={userName} showBackButton />
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Ionicons name="chevron-back" size={24} color="#fff" />
+        </TouchableOpacity>
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerName}>{userName}</Text>
+          <Text style={styles.headerMeta}>{isTyping ? "typing…" : "Tap to view profile"}</Text>
+        </View>
+        <TouchableOpacity onPress={() => navigation.navigate("Profile", { userId })}>
+          <Ionicons name="person-circle-outline" size={26} color="#fff" />
+        </TouchableOpacity>
+      </View>
 
-      <View style={styles.timerContainer}>
+      <View style={styles.timerBar}>
         <Ionicons name="time-outline" size={16} color={timeRemaining > 30 ? "#4dabf7" : "#ff6b6b"} />
-        <Text style={[styles.timerText, timeRemaining > 30 ? styles.timerNormal : styles.timerLow]}>
-          {formatTime(timeRemaining)}
-        </Text>
+        <Text style={[styles.timerText, timeRemaining <= 30 && styles.timerLow]}>{formatTime}</Text>
         <TouchableOpacity style={styles.extendButton} onPress={handleExtendTime} disabled={isExtending}>
-          <Text style={styles.extendButtonText}>{isExtending ? 'Extending...' : 'Extend +100s'}</Text>
+          <Text style={styles.extendText}>{isExtending ? "Extending…" : "+60s (1 credit)"}</Text>
         </TouchableOpacity>
       </View>
 
       <FlatList
         ref={flatListRef}
         data={messages}
+        keyExtractor={(item) => item.id}
         renderItem={renderMessage}
-        keyExtractor={item => item.id}
         contentContainerStyle={styles.messagesList}
         onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-        onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
       />
 
-      {timeRemaining > 0 ? (
-        <View style={styles.inputContainer}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
+        <View style={styles.inputRow}>
           <TextInput
-            style={styles.input}
-            placeholder="Type a message..."
-            placeholderTextColor="#8e8e93"
-            value={inputText}
-            onChangeText={setInputText}
-            multiline
-          />
+          style={styles.input}
+          placeholder="Type a message"
+          placeholderTextColor="#8e95bd"
+          value={inputText}
+          onChangeText={(text) => {
+            setInputText(text);
+            setIsTyping(true);
+            if (typingTimer.current) clearTimeout(typingTimer.current);
+            typingTimer.current = setTimeout(() => setIsTyping(false), 1200);
+          }}
+          multiline
+        />
           <TouchableOpacity
             style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
             onPress={handleSend}
@@ -252,161 +241,151 @@ const ChatScreen = () => {
             <Ionicons name="send" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
-      ) : (
-        <View style={styles.expiredContainer}>
-          <Text style={styles.expiredText}>Chat time expired</Text>
-          <TouchableOpacity style={styles.extendChatButton} onPress={handleExtendTime} disabled={isExtending}>
-            <Text style={styles.extendChatButtonText}>{isExtending ? 'Extending...' : 'Extend Chat (1 Credit)'}</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0a0e17",
+    backgroundColor: "#030612",
   },
-  timerContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+  headerInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  headerName: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  headerMeta: {
+    color: "#8e95bd",
+    fontSize: 12,
+  },
+  timerBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginHorizontal: 16,
+    marginTop: 12,
     paddingVertical: 8,
-    backgroundColor: '#1a1f2c',
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "#101632",
   },
   timerText: {
+    color: "#4dabf7",
+    fontWeight: "700",
     fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  timerNormal: {
-    color: '#4dabf7',
   },
   timerLow: {
-    color: '#ff6b6b',
+    color: "#ff6b6b",
   },
   extendButton: {
-    marginLeft: 10,
-    backgroundColor: 'rgba(77, 171, 247, 0.1)',
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    paddingHorizontal: 8,
     borderRadius: 12,
+    backgroundColor: "rgba(77,171,247,0.15)",
   },
-  extendButtonText: {
-    color: '#4dabf7',
+  extendText: {
+    color: "#4dabf7",
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   messagesList: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    padding: 20,
   },
-  messageContainer: {
-    flexDirection: 'row',
-    marginBottom: 16,
-    alignItems: 'flex-end',
+  bubbleRow: {
+    flexDirection: "row",
+    marginBottom: 14,
+    alignItems: "flex-end",
   },
-  userMessageContainer: {
-    justifyContent: 'flex-end',
+  bubbleRowUser: {
+    justifyContent: "flex-end",
   },
-  otherMessageContainer: {
-    justifyContent: 'flex-start',
+  bubbleRowOther: {
+    justifyContent: "flex-start",
   },
   messageBubble: {
-    maxWidth: '75%',
-    padding: 10,
-    borderRadius: 12,
+    maxWidth: "75%",
+    padding: 12,
+    borderRadius: 16,
   },
-  userMessageBubble: {
-    backgroundColor: '#4dabf7',
-    borderTopRightRadius: 0,
-    marginLeft: 'auto',
+  bubbleUser: {
+    backgroundColor: "#4dabf7",
+    borderBottomRightRadius: 2,
   },
-  otherMessageBubble: {
-    backgroundColor: '#2a2e3d',
-    borderTopLeftRadius: 0,
-    marginRight: 'auto',
+  bubbleOther: {
+    backgroundColor: "#111632",
+    borderBottomLeftRadius: 2,
   },
   messageText: {
-    color: '#fff',
-    fontSize: 14,
+    color: "#fff",
+    fontSize: 15,
+  },
+  metaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 6,
   },
   messageTime: {
-    fontSize: 10,
-    color: '#aaa',
-    alignSelf: 'flex-end',
-    marginTop: 4,
+    color: "rgba(255,255,255,0.6)",
+    fontSize: 11,
+  },
+  statusPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  statusText: {
+    color: "#d7e7ff",
+    fontSize: 11,
   },
   avatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    marginRight: 8,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginRight: 10,
   },
-  avatarPlaceholder: {
-    width: 28,
-    height: 28,
-    marginLeft: 8,
-  },
-  systemMessageContainer: {
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  systemMessageText: {
-    color: '#888',
-    fontSize: 12,
-    fontStyle: 'italic',
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 12,
     borderTopWidth: 1,
-    borderTopColor: '#1a1f2c',
-    backgroundColor: '#0a0e17',
+    borderTopColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "#030612",
   },
   input: {
     flex: 1,
-    minHeight: 40,
-    maxHeight: 100,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    color: '#fff',
-    borderWidth: 1,
-    borderColor: '#2a2e3d',
+    minHeight: 42,
+    maxHeight: 120,
     borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#111632",
+    color: "#fff",
   },
   sendButton: {
     marginLeft: 10,
-    backgroundColor: '#4dabf7',
-    padding: 10,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#4dabf7",
+    justifyContent: "center",
+    alignItems: "center",
   },
   sendButtonDisabled: {
-    backgroundColor: '#3a3e4d',
-  },
-  expiredContainer: {
-    alignItems: 'center',
-    padding: 20,
-    backgroundColor: '#1a1f2c',
-  },
-  expiredText: {
-    color: '#fff',
-    fontSize: 14,
-    marginBottom: 10,
-  },
-  extendChatButton: {
-    backgroundColor: '#4dabf7',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  extendChatButtonText: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
+    backgroundColor: "#33405c",
   },
 });
 

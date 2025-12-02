@@ -1,0 +1,69 @@
+# EAS Build - Exclude unnecessary files to reduce bundle size
+
+# Development files
+.git
+.gitignore
+.easignore
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Testing
+coverage/
+.nyc_output/
+*.log
+
+# Documentation
+README.md
+docs/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Expo specific
+.expo-shared/
+web-build/
+
+# Large assets that aren't needed
+NataApp*.zip
+temp_schema.txt
+
+# Build artifacts
+dist/
+build/
+
+# Config files that aren't needed in build
+.eslintrc*
+.prettierrc*
+tsconfig.json
+
+# Android specific build artifacts
+android/build/
+android/app/build/
+android/.gradle/
+
+# iOS specific build artifacts  
+ios/build/
+ios/Pods/
+
+# SQL files and database schemas
+*.sql
+
+# Additional large files
+*.zip
+*.tar.gz
+*.rar

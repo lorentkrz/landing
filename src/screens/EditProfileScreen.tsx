@@ -15,12 +15,12 @@ import {
   ActivityIndicator,
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
-import { useNavigation } from "@react-navigation/native"
 import Button from "../components/Button"
 import { useAuth } from "../context/AuthContext"
+import { useAppNavigation } from "../navigation/useAppNavigation"
 
 const EditProfileScreen = () => {
-  const navigation = useNavigation()
+  const navigation = useAppNavigation()
   const { user, updateUser } = useAuth()
 
   const [isLoading, setIsLoading] = useState(false)

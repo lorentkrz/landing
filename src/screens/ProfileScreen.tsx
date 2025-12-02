@@ -1,816 +1,764 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  Image,
-  TouchableOpacity,
-  ScrollView,
-  StatusBar,
-  Switch,
   Alert,
-  RefreshControl,
-  ActivityIndicator,
-  Share,
+  FlatList,
+  Image,
   Linking,
-} from "react-native"
-import { Ionicons } from "@expo/vector-icons"
-import { useNavigation } from "@react-navigation/native"
-import Header from "../components/Header"
-import Button from "../components/Button"
-import { useAuth } from "../context/AuthContext"
-import { useCredits } from "../context/CreditsContext"
+  RefreshControl,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Switch,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
+import { Ionicons } from "@expo/vector-icons";
+import { useAuth } from "../context/AuthContext";
+import { useCredits } from "../context/CreditsContext";
+import { useReferrals } from "../context/ReferralContext";
+import type { Referral } from "../types";
+import Button from "../components/Button";
+import { supabase } from "../lib/supabase";
+import { useAppNavigation } from "../navigation/useAppNavigation";
+
+type ProfilePhoto = {
+  id: string;
+  imageUrl: string;
+  isProfile: boolean;
+};
+
+type ActivityItem = {
+  id: string;
+  title: string;
+  description: string;
+  createdAt: string;
+};
 
 const ProfileScreen = () => {
-  const navigation = useNavigation()
-  const { user, logout } = useAuth()
-  const { credits } = useCredits()
+  const navigation = useAppNavigation();
+  const { user, logout } = useAuth();
+  const { credits } = useCredits();
+  const { referrals, createInvite, shareBaseUrl, inviterReward, inviteeReward, isLoading: isReferralsLoading } = useReferrals();
 
-  const [activeTab, setActiveTab] = useState("about")
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true)
-  const [privacyEnabled, setPrivacyEnabled] = useState(false)
-  const [darkModeEnabled, setDarkModeEnabled] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-
-  // Mock data for demonstration
-  const [userStats, setUserStats] = useState({
-    checkIns: 26,
-    connections: 142,
-    venues: 18,
-  })
+  const [photos, setPhotos] = useState<ProfilePhoto[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [darkModeEnabled, setDarkModeEnabled] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [stats, setStats] = useState({ checkIns: 0, connections: 0, venues: 0 });
 
   useEffect(() => {
-    // Fetch user data when component mounts
-    fetchUserData()
-  }, [])
+    if (user?.id) {
+      fetchProfileData();
+    }
+  }, [user?.id]);
 
-  const fetchUserData = async () => {
-    // Simulate API call to fetch user data
-    setIsLoading(true)
-    // In a real app, you would fetch user data from your API
-    setTimeout(() => {
-      setIsLoading(false)
-    }, 1000)
-  }
+  const fetchProfileData = async () => {
+    if (!user?.id) return;
+    await Promise.all([fetchPhotos(), fetchActivity(), fetchStats(), fetchPreferences()]);
+  };
+
+  const fetchPhotos = async () => {
+    if (!user?.id) return;
+    const { data, error } = await supabase
+      .from("profile_photos")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false });
+    if (!error && data) {
+      setPhotos(
+        data.map((photo) => ({
+          id: photo.id,
+          imageUrl: photo.image_url,
+          isProfile: photo.is_profile,
+        })),
+      );
+    }
+  };
+
+  const fetchActivity = async () => {
+    if (!user?.id) return;
+    const { data, error } = await supabase
+      .from("user_activity")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(6);
+    if (!error && data) {
+      setActivity(
+        data.map((item) => ({
+          id: item.id,
+          title: item.title,
+          description: item.description ?? "",
+          createdAt: new Date(item.created_at).toLocaleString(),
+        })),
+      );
+    }
+  };
+
+  const fetchStats = async () => {
+    if (!user?.id) return;
+    const [{ count: checkIns = 0 }, { count: connections = 0 }, { data: venueRows }] = await Promise.all([
+      supabase.from("check_ins").select("*", { count: "exact", head: true }).eq("user_id", user.id),
+      supabase.from("contact_book").select("*", { count: "exact", head: true }).eq("owner_id", user.id),
+      supabase.from("check_ins").select("venue_id").eq("user_id", user.id),
+    ]);
+    const uniqueVenues = new Set((venueRows ?? []).map((row) => row.venue_id)).size;
+    setStats({ checkIns, connections, venues: uniqueVenues });
+  };
+
+  const fetchPreferences = async () => {
+    if (!user?.id) return;
+    const { data } = await supabase.from("profiles").select("notifications_enabled, is_private").eq("id", user.id).single();
+    if (data) {
+      setNotificationsEnabled(data.notifications_enabled ?? true);
+      setIsPrivate(data.is_private ?? false);
+    }
+  };
 
   const onRefresh = async () => {
-    setIsRefreshing(true)
-    await fetchUserData()
-    setIsRefreshing(false)
-  }
+    setIsRefreshing(true);
+    await fetchProfileData();
+    setIsRefreshing(false);
+  };
 
-  const handleLogout = async () => {
-    Alert.alert("Logout", "Are you sure you want to logout?", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
-      {
-        text: "Logout",
-        onPress: async () => {
-          try {
-            setIsLoading(true)
-            await logout()
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "Login" }],
-            })
-          } catch (error) {
-            Alert.alert("Error", "Failed to logout. Please try again.")
-          } finally {
-            setIsLoading(false)
-          }
-        },
-      },
-    ])
-  }
+  const handleTogglePreference = async (field: "notifications_enabled" | "is_private", value: boolean) => {
+    if (!user?.id) return;
+    const { error } = await supabase.from("profiles").update({ [field]: value }).eq("id", user.id);
+    if (error) {
+      Alert.alert("Update failed", "Please try again.");
+      return;
+    }
+    if (field === "notifications_enabled") {
+      setNotificationsEnabled(value);
+    } else {
+      setIsPrivate(value);
+    }
+  };
+
+  const getStatusColor = (status: Referral["status"]) => {
+    switch (status) {
+      case "rewarded":
+        return "#34d399";
+      case "joined":
+        return "#60a5fa";
+      case "revoked":
+        return "#fb7185";
+      default:
+        return "#fbbf24";
+    }
+  };
+
+  const statusLabel: Record<Referral["status"], string> = {
+    pending: "Waiting",
+    joined: "Joined",
+    rewarded: "Rewarded",
+    revoked: "Revoked",
+  };
+
+  const handleInviteFriend = async () => {
+    const invite = await createInvite();
+    if (!invite) return;
+    const link = `${shareBaseUrl}?code=${invite.code}`;
+    try {
+      await Share.share({
+        message: `Join me on Nataa! Use my code ${invite.code} for bonus credits: ${link}`,
+        url: link,
+        title: "Join me on Nataa",
+      });
+    } catch (error) {
+      console.warn("Invite share cancelled", error);
+    }
+  };
 
   const handleShareProfile = async () => {
     try {
       await Share.share({
-        message: `Check out my profile on Nata: ${user?.firstName} ${user?.lastName}`,
-        // In a real app, you would include a deep link to your profile
+        message: `Find me on Nataa: ${user?.firstName ?? ""} ${user?.lastName ?? ""}`,
         url: "https://nata.app/profile/" + user?.id,
-      })
-    } catch (error) {
-      Alert.alert("Error", "Failed to share profile")
+      });
+    } catch {
+      Alert.alert("Error", "Failed to share profile");
     }
-  }
+  };
+
+  const handleAddPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert("Permission required", "Allow photo access to upload images.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaType.Images,
+      allowsEditing: true,
+      quality: 0.8,
+    });
+    if (result.canceled || !user?.id) return;
+    const asset = result.assets[0];
+    const response = await fetch(asset.uri);
+    const blob = await response.blob();
+    const path = `${user.id}/${Date.now()}.${asset.fileName?.split(".").pop() ?? "jpg"}`;
+    const { error } = await supabase.storage.from("profile_photos").upload(path, blob);
+    if (error) {
+      Alert.alert("Upload failed", "Unable to upload image.");
+      return;
+    }
+    const { data } = supabase.storage.from("profile_photos").getPublicUrl(path);
+    await supabase.from("profile_photos").insert({
+      user_id: user.id,
+      image_url: data.publicUrl,
+    });
+    fetchPhotos();
+  };
+
+  const handleSetProfilePhoto = async (photo: ProfilePhoto) => {
+    if (!user?.id) return;
+    await supabase
+      .from("profile_photos")
+      .update({ is_profile: false })
+      .eq("user_id", user.id);
+    await supabase
+      .from("profile_photos")
+      .update({ is_profile: true })
+      .eq("id", photo.id);
+    await supabase.from("profiles").update({ avatar_url: photo.imageUrl }).eq("id", user.id);
+    fetchPhotos();
+  };
+
+  const handleLogout = async () => {
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Logout",
+        onPress: async () => {
+          await logout();
+          navigation.navigate("Onboarding");
+        },
+      },
+    ]);
+  };
 
   const handleDeleteAccount = () => {
-    Alert.alert("Delete Account", "Are you sure you want to delete your account? This action cannot be undone.", [
-      {
-        text: "Cancel",
-        style: "cancel",
-      },
+    Alert.alert("Delete Account", "Are you sure? This action cannot be undone.", [
+      { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
         style: "destructive",
-        onPress: () => {
-          // In a real app, you would call an API to delete the account
-          Alert.alert(
-            "Account Deletion",
-            "Your account deletion request has been submitted. We'll process it within 24 hours.",
-          )
-        },
+        onPress: () => Alert.alert("Account Deletion", "We'll process your request within 24 hours."),
       },
-    ])
-  }
+    ]);
+  };
 
-  const handleContactSupport = () => {
-    // In a real app, you would open an email client or in-app support chat
-    Linking.openURL("mailto:support@nata.app?subject=Support%20Request")
-  }
-
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case "about":
-        return (
-          <View style={styles.tabContent}>
-            <View style={styles.infoSection}>
-              <Text style={styles.infoLabel}>Bio</Text>
-              <Text style={styles.infoValue}>{user?.bio || "No bio yet"}</Text>
-            </View>
-
-            <View style={styles.infoSection}>
-              <Text style={styles.infoLabel}>Location</Text>
-              <Text style={styles.infoValue}>
-                {user?.city || "City"}, {user?.country || "Country"}
-              </Text>
-            </View>
-
-            <View style={styles.infoSection}>
-              <Text style={styles.infoLabel}>Member Since</Text>
-              <Text style={styles.infoValue}>March 2023</Text>
-            </View>
-
-            <View style={styles.statsContainer}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{userStats.checkIns}</Text>
-                <Text style={styles.statLabel}>Check-ins</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{userStats.connections}</Text>
-                <Text style={styles.statLabel}>Connections</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{userStats.venues}</Text>
-                <Text style={styles.statLabel}>Venues</Text>
-              </View>
-            </View>
-
-            <View style={styles.creditsContainer}>
-              <View style={styles.creditsHeader}>
-                <Text style={styles.creditsTitle}>Your Credits</Text>
-                <TouchableOpacity style={styles.buyCreditsButton} onPress={() => navigation.navigate("Credits")}>
-                  <Text style={styles.buyCreditsText}>Buy More</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.creditsCard}>
-                <View style={styles.creditsIconContainer}>
-                  <Ionicons name="flash" size={24} color="#4dabf7" />
-                </View>
-                <View style={styles.creditsInfo}>
-                  <Text style={styles.creditsValue}>{credits}</Text>
-                  <Text style={styles.creditsLabel}>Available Credits</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.activitySection}>
-              <Text style={styles.activityTitle}>Recent Activity</Text>
-              <View style={styles.activityItem}>
-                <View style={styles.activityIconContainer}>
-                  <Ionicons name="location" size={16} color="#4dabf7" />
-                </View>
-                <View style={styles.activityContent}>
-                  <Text style={styles.activityText}>
-                    You checked in at <Text style={styles.activityHighlight}>Skybar Lounge</Text>
-                  </Text>
-                  <Text style={styles.activityTime}>2 days ago</Text>
-                </View>
-              </View>
-              <View style={styles.activityItem}>
-                <View style={styles.activityIconContainer}>
-                  <Ionicons name="people" size={16} color="#4dabf7" />
-                </View>
-                <View style={styles.activityContent}>
-                  <Text style={styles.activityText}>
-                    You connected with <Text style={styles.activityHighlight}>Alex</Text> and 3 others
-                  </Text>
-                  <Text style={styles.activityTime}>1 week ago</Text>
-                </View>
-              </View>
-            </View>
-          </View>
-        )
-      case "photos":
-        return (
-          <View style={styles.photosContainer}>
-            <View style={styles.photosHeader}>
-              <Text style={styles.photosTitle}>My Photos</Text>
-              <TouchableOpacity style={styles.addPhotoButton}>
-                <Ionicons name="add-circle" size={24} color="#4dabf7" />
-                <Text style={styles.addPhotoText}>Add</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.photosGrid}>
-              {Array(9)
-                .fill(0)
-                .map((_, index) => (
-                  <TouchableOpacity key={index} style={styles.photoItem}>
-                    <Image
-                      source={{ uri: `https://images.unsplash.com/photo-${1550000000000 + index}?q=80&w=400` }}
-                      style={styles.photo}
-                    />
-                    {index === 0 && (
-                      <TouchableOpacity style={styles.setProfilePhotoButton}>
-                        <Text style={styles.setProfilePhotoText}>Profile</Text>
-                      </TouchableOpacity>
-                    )}
-                  </TouchableOpacity>
-                ))}
-            </View>
-          </View>
-        )
-      case "settings":
-        return (
-          <View style={styles.settingsContainer}>
-            <View style={styles.settingSection}>
-              <Text style={styles.settingSectionTitle}>Account</Text>
-
-              <TouchableOpacity style={styles.settingItem} onPress={() => navigation.navigate("EditProfile")}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingIcon, { backgroundColor: "rgba(77, 171, 247, 0.1)" }]}>
-                    <Ionicons name="person-outline" size={20} color="#4dabf7" />
-                  </View>
-                  <Text style={styles.settingText}>Edit Profile</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#aaa" />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.settingItem}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingIcon, { backgroundColor: "rgba(77, 171, 247, 0.1)" }]}>
-                    <Ionicons name="lock-closed-outline" size={20} color="#4dabf7" />
-                  </View>
-                  <Text style={styles.settingText}>Privacy</Text>
-                </View>
-                <Switch
-                  value={privacyEnabled}
-                  onValueChange={setPrivacyEnabled}
-                  trackColor={{ false: "#1a1f2c", true: "#4dabf7" }}
-                  thumbColor="#fff"
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.settingItem}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingIcon, { backgroundColor: "rgba(77, 171, 247, 0.1)" }]}>
-                    <Ionicons name="notifications-outline" size={20} color="#4dabf7" />
-                  </View>
-                  <Text style={styles.settingText}>Notifications</Text>
-                </View>
-                <Switch
-                  value={notificationsEnabled}
-                  onValueChange={setNotificationsEnabled}
-                  trackColor={{ false: "#1a1f2c", true: "#4dabf7" }}
-                  thumbColor="#fff"
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.settingItem}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingIcon, { backgroundColor: "rgba(77, 171, 247, 0.1)" }]}>
-                    <Ionicons name="moon-outline" size={20} color="#4dabf7" />
-                  </View>
-                  <Text style={styles.settingText}>Dark Mode</Text>
-                </View>
-                <Switch
-                  value={darkModeEnabled}
-                  onValueChange={setDarkModeEnabled}
-                  trackColor={{ false: "#1a1f2c", true: "#4dabf7" }}
-                  thumbColor="#fff"
-                />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.settingItem} onPress={() => navigation.navigate("ChangePassword")}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingIcon, { backgroundColor: "rgba(77, 171, 247, 0.1)" }]}>
-                    <Ionicons name="key-outline" size={20} color="#4dabf7" />
-                  </View>
-                  <Text style={styles.settingText}>Change Password</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#aaa" />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.settingItem} onPress={handleShareProfile}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingIcon, { backgroundColor: "rgba(77, 171, 247, 0.1)" }]}>
-                    <Ionicons name="share-social-outline" size={20} color="#4dabf7" />
-                  </View>
-                  <Text style={styles.settingText}>Share Profile</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#aaa" />
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.settingSection}>
-              <Text style={styles.settingSectionTitle}>Support</Text>
-
-              <TouchableOpacity style={styles.settingItem} onPress={() => navigation.navigate("HelpCenter")}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingIcon, { backgroundColor: "rgba(77, 171, 247, 0.1)" }]}>
-                    <Ionicons name="help-circle-outline" size={20} color="#4dabf7" />
-                  </View>
-                  <Text style={styles.settingText}>Help Center</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#aaa" />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.settingItem} onPress={handleContactSupport}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingIcon, { backgroundColor: "rgba(77, 171, 247, 0.1)" }]}>
-                    <Ionicons name="chatbubble-ellipses-outline" size={20} color="#4dabf7" />
-                  </View>
-                  <Text style={styles.settingText}>Contact Support</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#aaa" />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.settingItem} onPress={() => navigation.navigate("About")}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingIcon, { backgroundColor: "rgba(77, 171, 247, 0.1)" }]}>
-                    <Ionicons name="information-circle-outline" size={20} color="#4dabf7" />
-                  </View>
-                  <Text style={styles.settingText}>About</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#aaa" />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.settingItem} onPress={() => Linking.openURL("https://nata.app/privacy")}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingIcon, { backgroundColor: "rgba(77, 171, 247, 0.1)" }]}>
-                    <Ionicons name="document-text-outline" size={20} color="#4dabf7" />
-                  </View>
-                  <Text style={styles.settingText}>Privacy Policy</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#aaa" />
-              </TouchableOpacity>
-
-              <TouchableOpacity style={styles.settingItem} onPress={() => Linking.openURL("https://nata.app/terms")}>
-                <View style={styles.settingLeft}>
-                  <View style={[styles.settingIcon, { backgroundColor: "rgba(77, 171, 247, 0.1)" }]}>
-                    <Ionicons name="document-outline" size={20} color="#4dabf7" />
-                  </View>
-                  <Text style={styles.settingText}>Terms of Service</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color="#aaa" />
-              </TouchableOpacity>
-            </View>
-
-            <Button
-              title="Log Out"
-              variant="outline"
-              onPress={handleLogout}
-              style={styles.logoutButton}
-              textStyle={styles.logoutText}
-              fullWidth
-              loading={isLoading}
-            />
-
-            <TouchableOpacity style={styles.deleteAccountButton} onPress={handleDeleteAccount}>
-              <Text style={styles.deleteAccountText}>Delete Account</Text>
-            </TouchableOpacity>
-          </View>
-        )
-      default:
-        return null
-    }
-  }
-
-  if (isLoading && !isRefreshing) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4dabf7" />
-        <Text style={styles.loadingText}>Loading profile...</Text>
-      </View>
-    )
-  }
+  const photoGrid = useMemo(() => photos.slice(0, 9), [photos]);
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <Header title="Profile" rightIcon="settings-outline" onRightIconPress={() => setActiveTab("settings")} />
-
+    <SafeAreaView style={styles.container}>
       <ScrollView
-        showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor="#4dabf7" />}
+        contentContainerStyle={{ paddingBottom: 40 }}
       >
-        <View style={styles.profileHeader}>
-          <Image
-            source={{ uri: user?.avatar || "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=1887" }}
-            style={styles.profileImage}
-          />
-          <Text style={styles.profileName}>
-            {user?.firstName || "John"} {user?.lastName || "Doe"}
-          </Text>
-          <View style={styles.profileMeta}>
-            <Text style={styles.profileAge}>{user?.age || 25}</Text>
-            <Text style={styles.profileDot}>•</Text>
-            <Text style={styles.profileGender}>{user?.gender || "Not specified"}</Text>
+        <View style={styles.heroCard}>
+          <View style={styles.heroTopRow}>
+            <TouchableOpacity style={styles.heroIcon} onPress={() => navigation.navigate("EditProfile")}>
+              <Ionicons name="pencil" size={18} color="#0b1023" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.heroIcon} onPress={handleShareProfile}>
+              <Ionicons name="share-social" size={18} color="#0b1023" />
+            </TouchableOpacity>
           </View>
-
-          <View style={styles.profileActions}>
-            <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate("EditProfile")}>
-              <View style={styles.actionButtonGradient}>
-                <Ionicons name="create-outline" size={20} color="#fff" />
+          <View style={styles.heroContent}>
+            <Image
+              source={{
+                uri:
+                  photos.find((photo) => photo.isProfile)?.imageUrl ??
+                  user?.avatar ??
+                  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?q=80&w=400&h=400&fit=crop",
+              }}
+              style={styles.avatar}
+            />
+            <Text style={styles.name}>
+              {user?.firstName} {user?.lastName}
+            </Text>
+            <Text style={styles.meta}>
+              {user?.city ?? "Add city"} • {user?.country ?? "Add country"}
+            </Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>{stats.checkIns}</Text>
+                <Text style={styles.statLabel}>Check-ins</Text>
               </View>
-              <Text style={styles.actionButtonText}>Edit</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionButton} onPress={() => navigation.navigate("Credits")}>
-              <View style={styles.actionButtonOutline}>
-                <Ionicons name="flash-outline" size={20} color="#4dabf7" />
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>{stats.connections}</Text>
+                <Text style={styles.statLabel}>Connections</Text>
               </View>
-              <Text style={styles.actionButtonText}>Credits</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.actionButton} onPress={handleShareProfile}>
-              <View style={styles.actionButtonOutline}>
-                <Ionicons name="share-social-outline" size={20} color="#4dabf7" />
+              <View style={styles.statCard}>
+                <Text style={styles.statValue}>{credits}</Text>
+                <Text style={styles.statLabel}>Credits</Text>
               </View>
-              <Text style={styles.actionButtonText}>Share</Text>
-            </TouchableOpacity>
+            </View>
+            <View style={styles.quickActions}>
+              <TouchableOpacity style={styles.quickButton} onPress={() => navigation.navigate("Credits")}>
+                <Ionicons name="card" size={16} color="#0b1023" />
+                <Text style={styles.quickButtonText}>Credits</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.quickButton} onPress={() => navigation.navigate("EditProfile")}>
+                <Ionicons name="person-circle" size={16} color="#0b1023" />
+                <Text style={styles.quickButtonText}>Edit</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.quickButton} onPress={() => navigation.navigate("HelpCenter")}>
+                <Ionicons name="help-buoy" size={16} color="#0b1023" />
+                <Text style={styles.quickButtonText}>Help</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 
-        <View style={styles.tabsContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === "about" && styles.activeTab]}
-            onPress={() => setActiveTab("about")}
-          >
-            <Text style={[styles.tabText, activeTab === "about" && styles.activeTabText]}>About</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === "photos" && styles.activeTab]}
-            onPress={() => setActiveTab("photos")}
-          >
-            <Text style={[styles.tabText, activeTab === "photos" && styles.activeTabText]}>Photos</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === "settings" && styles.activeTab]}
-            onPress={() => setActiveTab("settings")}
-          >
-            <Text style={[styles.tabText, activeTab === "settings" && styles.activeTabText]}>Settings</Text>
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <View>
+            <Text style={styles.sectionTitle}>Invite friends</Text>
+            <Text style={styles.sectionSubtitle}>
+              +{inviterReward} credits for you • +{inviteeReward} for them
+            </Text>
+          </View>
+          <TouchableOpacity onPress={handleInviteFriend} style={styles.inviteButton}>
+            <Ionicons name="gift" size={18} color="#0a0e17" />
+            <Text style={styles.inviteButtonText}>Invite</Text>
           </TouchableOpacity>
         </View>
-
-        {renderTabContent()}
-      </ScrollView>
-
-      {/* Session indicator */}
-      <View style={styles.sessionIndicator}>
-        <Ionicons name="wifi" size={14} color="#4dabf7" />
-        <Text style={styles.sessionText}>Active session</Text>
+        {isReferralsLoading ? (
+          <Text style={styles.sectionBody}>Loading invites...</Text>
+        ) : referrals.length === 0 ? (
+          <Text style={styles.sectionBody}>Share your link and earn free credits when friends join.</Text>
+        ) : (
+          <View style={{ marginTop: 14 }}>
+            {[referrals[0]].map((referral) => (
+              <View key={referral.id} style={styles.referralRow}>
+                <View>
+                  <Text style={styles.referralCode}>{referral.code}</Text>
+                  <Text style={styles.referralMeta}>
+                    {referral.inviteeContact ?? "No contact"} • {new Date(referral.createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
+                <View style={[styles.referralStatusChip, { backgroundColor: getStatusColor(referral.status) }]}>
+                  <Text style={styles.referralStatusText}>{statusLabel[referral.status]}</Text>
+                </View>
+              </View>
+            ))}
+            {referrals.length > 1 ? (
+              <Text style={styles.sectionBody}>{referrals.length - 1}+ invites already created</Text>
+            ) : null}
+          </View>
+        )}
       </View>
-    </View>
-  )
-}
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Photo roll</Text>
+            <TouchableOpacity style={styles.addPhotoButton} onPress={handleAddPhoto}>
+              <Ionicons name="add" size={18} color="#4dabf7" />
+              <Text style={styles.addPhotoText}>Add photo</Text>
+            </TouchableOpacity>
+          </View>
+          {photoGrid.length ? (
+            <View style={styles.photoGrid}>
+              {photoGrid.map((photo) => (
+                <TouchableOpacity key={photo.id} style={styles.photoItem} onPress={() => handleSetProfilePhoto(photo)}>
+                  <Image source={{ uri: photo.imageUrl }} style={styles.photo} />
+                  {photo.isProfile && (
+                    <View style={styles.profileBadge}>
+                      <Ionicons name="star" size={12} color="#fff" />
+                      <Text style={styles.profileBadgeText}>Profile</Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.sectionBody}>Add photos from your nights out to showcase your vibe.</Text>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Activity</Text>
+          <FlatList
+            data={activity}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+            renderItem={({ item }) => (
+              <View style={styles.activityRow}>
+                <Ionicons name="sparkles-outline" size={20} color="#fff" />
+                <View style={styles.activityContent}>
+                  <Text style={styles.activityTitle}>{item.title}</Text>
+                  <Text style={styles.activityDescription}>{item.description}</Text>
+                  <Text style={styles.activityMeta}>{item.createdAt}</Text>
+                </View>
+              </View>
+            )}
+            ListEmptyComponent={<Text style={styles.sectionBody}>Your recent activity will appear here.</Text>}
+          />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Preferences</Text>
+          <View style={styles.preferenceRow}>
+            <View>
+              <Text style={styles.preferenceTitle}>Notifications</Text>
+              <Text style={styles.preferenceSubtitle}>Get notified about messages and requests.</Text>
+            </View>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={(value) => handleTogglePreference("notifications_enabled", value)}
+              trackColor={{ true: "#4dabf7", false: "#2b314d" }}
+              thumbColor="#fff"
+            />
+          </View>
+          <View style={styles.preferenceRow}>
+            <View>
+              <Text style={styles.preferenceTitle}>Private profile</Text>
+              <Text style={styles.preferenceSubtitle}>Hide from venue rooms unless you connect.</Text>
+            </View>
+            <Switch
+              value={isPrivate}
+              onValueChange={(value) => handleTogglePreference("is_private", value)}
+              trackColor={{ true: "#4dabf7", false: "#2b314d" }}
+              thumbColor="#fff"
+            />
+          </View>
+          <View style={styles.preferenceRow}>
+            <View>
+              <Text style={styles.preferenceTitle}>Dark mode</Text>
+              <Text style={styles.preferenceSubtitle}>Always use the dark theme.</Text>
+            </View>
+            <Switch value={darkModeEnabled} onValueChange={setDarkModeEnabled} trackColor={{ true: "#4dabf7", false: "#2b314d" }} thumbColor="#fff" />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Support</Text>
+          <TouchableOpacity style={styles.supportRow} onPress={() => navigation.navigate("HelpCenter")}>
+            <Ionicons name="help-circle-outline" size={20} color="#fff" />
+            <Text style={styles.supportText}>Help Center</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.supportRow} onPress={() => Linking.openURL("mailto:support@nata.app?subject=Support%20Request")}>
+            <Ionicons name="mail-outline" size={20} color="#fff" />
+            <Text style={styles.supportText}>Contact support</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account</Text>
+          <Button
+            title="Manage credits"
+            onPress={() => navigation.navigate("Credits")}
+            variant="ghost"
+            style={styles.accountButton}
+            textStyle={styles.accountButtonText}
+          />
+          <Button
+            title="Delete account"
+            onPress={handleDeleteAccount}
+            variant="ghost"
+            style={[styles.accountButton, styles.accountDanger]}
+            textStyle={[styles.accountButtonText, styles.accountDangerText]}
+          />
+          <Button
+            title="Logout"
+            onPress={handleLogout}
+            variant="ghost"
+            style={[styles.accountButton, styles.accountDanger]}
+            textStyle={[styles.accountButtonText, styles.accountDangerText]}
+          />
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0a0e17",
+    backgroundColor: "#030612",
   },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: "#0a0e17",
+  heroCard: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    padding: 18,
+    borderRadius: 20,
+    backgroundColor: "#0e1327",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 18,
+  },
+  heroTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 8,
+  },
+  heroIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#4dabf7",
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#4dabf7",
+    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 8,
   },
-  loadingText: {
-    color: "#fff",
-    marginTop: 10,
-  },
-  profileHeader: {
+  heroContent: {
     alignItems: "center",
-    paddingVertical: 20,
+    gap: 6,
+    marginTop: 4,
   },
-  profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    marginBottom: 15,
+  avatar: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
   },
-  profileName: {
+  name: {
     color: "#fff",
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "700",
+    marginTop: 14,
   },
-  profileMeta: {
+  meta: {
+    color: "#8b92c5",
+    marginTop: 4,
+  },
+  statsRow: {
     flexDirection: "row",
-    alignItems: "center",
-    marginTop: 5,
+    marginTop: 18,
+    gap: 14,
   },
-  profileAge: {
-    color: "#aaa",
-    fontSize: 16,
-  },
-  profileDot: {
-    color: "#aaa",
-    marginHorizontal: 5,
-  },
-  profileGender: {
-    color: "#aaa",
-    fontSize: 16,
-  },
-  profileActions: {
-    flexDirection: "row",
-    marginTop: 15,
-  },
-  actionButton: {
-    alignItems: "center",
-    marginHorizontal: 10,
-  },
-  actionButtonGradient: {
-    backgroundColor: "#4dabf7",
-    padding: 10,
-    borderRadius: 50,
-  },
-  actionButtonOutline: {
-    borderWidth: 1,
-    borderColor: "#4dabf7",
-    padding: 10,
-    borderRadius: 50,
-  },
-  actionButtonText: {
-    color: "#fff",
-    fontWeight: "600",
-    marginTop: 5,
-  },
-  tabsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginVertical: 20,
-  },
-  tab: {
+  statCard: {
     flex: 1,
-    paddingVertical: 10,
-    alignItems: "center",
-  },
-  tabText: {
-    color: "#aaa",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  activeTab: {
-    borderBottomWidth: 2,
-    borderBottomColor: "#4dabf7",
-  },
-  activeTabText: {
-    color: "#fff",
-  },
-  tabContent: {
-    paddingHorizontal: 15,
-  },
-  infoSection: {
-    marginBottom: 15,
-  },
-  infoLabel: {
-    color: "#aaa",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  infoValue: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  statsContainer: {
-    flexDirection: "row",
-    marginVertical: 20,
-    justifyContent: "space-between",
-  },
-  statItem: {
+    backgroundColor: "#101632",
+    paddingVertical: 12,
+    borderRadius: 14,
     alignItems: "center",
   },
   statValue: {
     color: "#fff",
-    fontSize: 20,
     fontWeight: "700",
+    fontSize: 18,
   },
   statLabel: {
-    color: "#aaa",
-    fontSize: 14,
-    fontWeight: "500",
+    color: "#8e95bd",
+    fontSize: 12,
+    marginTop: 4,
   },
-  statDivider: {
-    borderLeftWidth: 1,
-    borderLeftColor: "#1a1f2c",
-    height: 50,
-    marginHorizontal: 10,
-  },
-  creditsContainer: {
-    marginTop: 20,
-  },
-  creditsHeader: {
+  quickActions: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    gap: 10,
+    marginTop: 14,
   },
-  creditsTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  buyCreditsButton: {
-    padding: 5,
-  },
-  buyCreditsText: {
-    color: "#4dabf7",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  creditsCard: {
-    marginTop: 15,
+  quickButton: {
+    flex: 1,
     flexDirection: "row",
-    backgroundColor: "#1a1f2c",
-    borderRadius: 8,
-    padding: 15,
     alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#1f2b55",
+    paddingVertical: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
-  creditsIconContainer: {
-    backgroundColor: "rgba(77, 171, 247, 0.1)",
-    padding: 12,
-    borderRadius: 50,
-  },
-  creditsInfo: {
-    marginLeft: 15,
-  },
-  creditsValue: {
-    color: "#fff",
-    fontSize: 24,
+  quickButtonText: {
+    color: "#dfe7ff",
     fontWeight: "700",
   },
-  creditsLabel: {
-    color: "#aaa",
-    fontSize: 14,
+  section: {
+    marginTop: 24,
+    paddingHorizontal: 20,
   },
-  activitySection: {
-    marginTop: 25,
-    marginBottom: 20,
-  },
-  activityTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 15,
-  },
-  activityItem: {
-    flexDirection: "row",
-    marginBottom: 15,
-  },
-  activityIconContainer: {
-    backgroundColor: "rgba(77, 171, 247, 0.1)",
-    padding: 8,
-    borderRadius: 50,
-    marginRight: 10,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityText: {
-    color: "#fff",
-    fontSize: 14,
-  },
-  activityHighlight: {
-    color: "#4dabf7",
-    fontWeight: "600",
-  },
-  activityTime: {
-    color: "#aaa",
-    fontSize: 12,
-    marginTop: 3,
-  },
-  photosContainer: {
-    paddingHorizontal: 15,
-  },
-  photosHeader: {
+  sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 15,
   },
-  photosTitle: {
+  sectionTitle: {
     color: "#fff",
     fontSize: 18,
-    fontWeight: "600",
+    fontWeight: "700",
+  },
+  sectionSubtitle: {
+    color: "#8c93c1",
+    marginTop: 4,
+  },
+  sectionBody: {
+    color: "#d0d5f2",
+    marginTop: 8,
+  },
+  inviteButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#4dabf7",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    gap: 6,
+  },
+  inviteButtonText: {
+    color: "#0a0e17",
+    fontWeight: "700",
+  },
+  referralRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.05)",
+  },
+  referralCode: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 16,
+  },
+  referralMeta: {
+    color: "#8e95bd",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  referralStatusChip: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  referralStatusText: {
+    color: "#0a0e17",
+    fontWeight: "700",
+    fontSize: 12,
   },
   addPhotoButton: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 4,
   },
   addPhotoText: {
     color: "#4dabf7",
-    marginLeft: 5,
     fontWeight: "600",
   },
-  photosGrid: {
+  photoGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    justifyContent: "space-between",
+    marginTop: 12,
+    gap: 8,
   },
   photoItem: {
     width: "31%",
-    marginBottom: 10,
+    aspectRatio: 1,
+    borderRadius: 10,
+    overflow: "hidden",
     position: "relative",
   },
   photo: {
     width: "100%",
-    height: 100,
-    borderRadius: 8,
-    resizeMode: "cover",
+    height: "100%",
   },
-  setProfilePhotoButton: {
+  profileBadge: {
     position: "absolute",
-    bottom: 5,
-    right: 5,
-    backgroundColor: "rgba(77, 171, 247, 0.8)",
-    paddingVertical: 2,
+    bottom: 6,
+    left: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    borderRadius: 10,
     paddingHorizontal: 6,
-    borderRadius: 4,
+    paddingVertical: 2,
+    gap: 4,
   },
-  setProfilePhotoText: {
+  profileBadgeText: {
     color: "#fff",
     fontSize: 10,
     fontWeight: "600",
   },
-  settingsContainer: {
-    padding: 15,
-  },
-  settingSection: {
-    marginBottom: 20,
-  },
-  settingSectionTitle: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "700",
-    marginBottom: 10,
-  },
-  settingItem: {
+  activityRow: {
     flexDirection: "row",
+    gap: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.05)",
+  },
+  activityContent: {
+    flex: 1,
+  },
+  activityTitle: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  activityDescription: {
+    color: "#c3c7ea",
+    marginTop: 2,
+  },
+  activityMeta: {
+    color: "#8e95bd",
+    fontSize: 12,
+    marginTop: 4,
+  },
+  preferenceRow: {
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 15,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.04)",
   },
-  settingLeft: {
+  preferenceTitle: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  preferenceSubtitle: {
+    color: "#8c93c1",
+    fontSize: 12,
+    marginTop: 2,
+  },
+  supportRow: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 10,
+    paddingVertical: 12,
   },
-  settingIcon: {
-    padding: 10,
-    borderRadius: 50,
-  },
-  settingText: {
+  supportText: {
     color: "#fff",
-    fontSize: 16,
-    marginLeft: 10,
+    fontSize: 15,
+  },
+  deleteButton: {
+    marginTop: 10,
   },
   logoutButton: {
-    marginTop: 20,
-    borderColor: "#e74c3c",
+    marginTop: 16,
+    borderColor: "#ff7676",
   },
-  logoutText: {
-    color: "#e74c3c",
+  accountButton: {
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    backgroundColor: "#0e1327",
+    marginTop: 10,
   },
-  deleteAccountButton: {
-    alignItems: "center",
-    marginTop: 15,
-    marginBottom: 30,
-  },
-  deleteAccountText: {
-    color: "#e74c3c",
-    fontSize: 14,
-  },
-  sessionIndicator: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 8,
-    backgroundColor: "#1a1f2c",
-  },
-  sessionText: {
+  accountButtonText: {
     color: "#fff",
-    fontSize: 12,
-    marginLeft: 5,
+    fontWeight: "700",
   },
-})
+  accountDanger: {
+    borderColor: "rgba(255,118,118,0.4)",
+    backgroundColor: "rgba(255,118,118,0.08)",
+  },
+  accountDangerText: {
+    color: "#ff7676",
+  },
+});
 
-export default ProfileScreen
+export default ProfileScreen;

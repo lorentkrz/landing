@@ -1,247 +1,240 @@
-"use client"
+"use client";
 
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Image, Linking } from "react-native"
-import { Ionicons } from "@expo/vector-icons"
-import { useNavigation } from "@react-navigation/native"
+import { SafeAreaView } from "react-native-safe-area-context";
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Linking } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import { useAppNavigation } from "../navigation/useAppNavigation";
+
+const aboutLinks = [
+  { title: "Privacy Policy", icon: "document-text-outline", url: "https://nata.app/privacy" },
+  { title: "Terms of Service", icon: "document-outline", url: "https://nata.app/terms" },
+  { title: "Contact Us", icon: "mail-outline", url: "https://nata.app/contact" },
+  { title: "Website", icon: "globe-outline", url: "https://nata.app" },
+] as const;
+
+const socials = [
+  { icon: "logo-instagram", url: "https://instagram.com/nataapp" },
+  { icon: "logo-twitter", url: "https://twitter.com/nataapp" },
+  { icon: "logo-tiktok", url: "https://tiktok.com/@nataapp" },
+] as const;
 
 const AboutScreen = () => {
-  const navigation = useNavigation()
-  const appVersion = "1.0.0"
-
-  const handleOpenLink = (url) => {
-    Linking.openURL(url)
-  }
+  const navigation = useAppNavigation();
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>About</Text>
-        <View style={styles.placeholder} />
-      </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.logoContainer}>
-          <Image
-            source={{ uri: "https://images.unsplash.com/photo-1550000000000-1?q=80&w=400" }}
-            style={styles.logo}
-          />
-          <Text style={styles.appName}>Nata</Text>
-          <Text style={styles.appVersion}>Version {appVersion}</Text>
+    <SafeAreaView style={styles.container} edges={["top", "left", "right"]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+            <Ionicons name="arrow-back" size={20} color="#fff" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>About Nataa</Text>
+          <View style={{ width: 40 }} />
         </View>
 
+        <LinearGradient colors={["#1b1f3d", "#080a16"]} style={styles.hero}>
+          <View>
+            <Text style={styles.appName}>Nataa</Text>
+            <Text style={styles.appTagline}>Nightlife, reimagined.</Text>
+          </View>
+          <View style={styles.versionPill}>
+            <Text style={styles.versionText}>v1.0.0</Text>
+          </View>
+        </LinearGradient>
+
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About Nata</Text>
-          <Text style={styles.sectionText}>
-            Nata is a social nightlife app designed to help you discover venues, connect with people, and make the most of your night out. Our mission is to create meaningful connections and unforgettable experiences.
+          <Text style={styles.sectionTitle}>Our story</Text>
+          <Text style={styles.sectionBody}>
+            Nataa connects you to the rooms that matter. We craft premium experiences by blending check-ins, live guest lists, and timed chats,
+            so every night feels curated and safe.
           </Text>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Our Team</Text>
-          <Text style={styles.sectionText}>
-            We're a passionate team of developers, designers, and nightlife enthusiasts working together to create the best social experience for nightlife lovers around the world.
-          </Text>
-        </View>
-
-        <View style={styles.linksSection}>
-          <TouchableOpacity
-            style={styles.linkItem}
-            onPress={() => handleOpenLink("https://nata.app/privacy")}
-          >
-            <View style={styles.linkLeft}>
-              <Ionicons name="document-text-outline" size={20} color="#4dabf7" />
-              <Text style={styles.linkText}>Privacy Policy</Text>
+                <View style={styles.section}>
+          <Text style={styles.sectionTitle}>What we stand for</Text>
+          <View style={styles.metricsRow}>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricValue}>24/7</Text>
+              <Text style={styles.metricLabel}>Support</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#aaa" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.linkItem}
-            onPress={() => handleOpenLink("https://nata.app/terms")}
-          >
-            <View style={styles.linkLeft}>
-              <Ionicons name="document-outline" size={20} color="#4dabf7" />
-              <Text style={styles.linkText}>Terms of Service</Text>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricValue}>12</Text>
+              <Text style={styles.metricLabel}>Cities</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#aaa" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.linkItem}
-            onPress={() => handleOpenLink("https://nata.app/contact")}
-          >
-            <View style={styles.linkLeft}>
-              <Ionicons name="mail-outline" size={20} color="#4dabf7" />
-              <Text style={styles.linkText}>Contact Us</Text>
+            <View style={styles.metricCard}>
+              <Text style={styles.metricValue}>{"\u221e"}</Text>
+              <Text style={styles.metricLabel}>Connections</Text>
             </View>
-            <Ionicons name="chevron-forward" size={20} color="#aaa" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.linkItem}
-            onPress={() => handleOpenLink("https://nata.app")}
-          >
-            <View style={styles.linkLeft}>
-              <Ionicons name="globe-outline" size={20} color="#4dabf7" />
-              <Text style={styles.linkText}>Website</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color="#aaa" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.socialSection}>
-          <Text style={styles.socialTitle}>Follow Us</Text>
-          <View style={styles.socialIcons}>
-            <TouchableOpacity
-              style={styles.socialIcon}
-              onPress={() => handleOpenLink("https://instagram.com/nataapp")}
-            >
-              <Ionicons name="logo-instagram" size={24} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.socialIcon}
-              onPress={() => handleOpenLink("https://twitter.com/nataapp")}
-            >
-              <Ionicons name="logo-twitter" size={24} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.socialIcon}
-              onPress={() => handleOpenLink("https://facebook.com/nataapp")}
-            >
-              <Ionicons name="logo-facebook" size={24} color="#fff" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.socialIcon}
-              onPress={() => handleOpenLink("https://tiktok.com/@nataapp")}
-            >
-              <Ionicons name="logo-tiktok" size={24} color="#fff" />
-            </TouchableOpacity>
           </View>
         </View>
 
-        <Text style={styles.copyright}>© 2023 Nata. All rights reserved.</Text>
+        </View>
+
+        <View style={styles.card}>
+          {aboutLinks.map((link) => (
+            <TouchableOpacity key={link.title} style={styles.linkRow} onPress={() => Linking.openURL(link.url)}>
+              <View style={styles.linkLeft}>
+                <Ionicons name={link.icon as keyof typeof Ionicons.glyphMap} size={20} color="#4dabf7" />
+                <Text style={styles.linkText}>{link.title}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color="#8e95bd" />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Follow us</Text>
+          <View style={styles.socialRow}>
+            {socials.map((item) => (
+              <TouchableOpacity key={item.icon} style={styles.socialButton} onPress={() => Linking.openURL(item.url)}>
+                <Ionicons name={item.icon as keyof typeof Ionicons.glyphMap} size={20} color="#fff" />
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <Text style={styles.footerText}>(c) {new Date().getFullYear()} Nataa. All rights reserved.</Text>
       </ScrollView>
-    </View>
-  )
-}
+    </SafeAreaView>
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0a0e17",
+    backgroundColor: "#03050f",
   },
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 15,
-    paddingTop: 60,
-    paddingBottom: 15,
+    paddingHorizontal: 20,
+    paddingTop: 6,
   },
   backButton: {
-    padding: 5,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#151936",
+    justifyContent: "center",
+    alignItems: "center",
   },
   headerTitle: {
     color: "#fff",
     fontSize: 20,
     fontWeight: "700",
   },
-  placeholder: {
-    width: 24,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 15,
-  },
-  logoContainer: {
+  hero: {
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 28,
+    padding: 24,
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    marginVertical: 30,
-  },
-  logo: {
-    width: 100,
-    height: 100,
-    borderRadius: 20,
-    marginBottom: 15,
   },
   appName: {
     color: "#fff",
-    fontSize: 24,
+    fontSize: 32,
     fontWeight: "700",
-    marginBottom: 5,
   },
-  appVersion: {
-    color: "#aaa",
-    fontSize: 14,
+  appTagline: {
+    color: "#c6cbe3",
+    marginTop: 6,
+  },
+  versionPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  versionText: {
+    color: "#fff",
+    fontWeight: "600",
   },
   section: {
-    marginBottom: 25,
+    marginTop: 24,
+    paddingHorizontal: 20,
   },
   sectionTitle: {
     color: "#fff",
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 10,
   },
-  sectionText: {
-    color: "#aaa",
-    fontSize: 14,
-    lineHeight: 22,
+  sectionBody: {
+    color: "#c6cbe3",
+    marginTop: 8,
+    lineHeight: 20,
   },
-  linksSection: {
-    backgroundColor: "#1a1f2c",
-    borderRadius: 12,
-    marginBottom: 25,
-    overflow: "hidden",
+  metricsRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 16,
   },
-  linkItem: {
+  metricCard: {
+    flex: 1,
+    borderRadius: 18,
+    backgroundColor: "#0f1425",
+    padding: 16,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+  },
+  metricValue: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  metricLabel: {
+    color: "#8f96bb",
+    marginTop: 4,
+  },
+  card: {
+    marginTop: 30,
+    marginHorizontal: 20,
+    backgroundColor: "#0f1425",
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.04)",
+  },
+  linkRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 15,
-    paddingHorizontal: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.05)",
+    borderBottomColor: "rgba(255,255,255,0.05)",
   },
   linkLeft: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 12,
   },
   linkText: {
     color: "#fff",
     fontSize: 16,
-    marginLeft: 10,
   },
-  socialSection: {
-    marginBottom: 25,
-  },
-  socialTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "700",
-    marginBottom: 15,
-  },
-  socialIcons: {
+  socialRow: {
     flexDirection: "row",
-    justifyContent: "center",
+    justifyContent: "flex-start",
+    gap: 12,
+    marginTop: 12,
   },
-  socialIcon: {
-    backgroundColor: "#1a1f2c",
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+  socialButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "#151936",
     justifyContent: "center",
     alignItems: "center",
-    marginHorizontal: 10,
   },
-  copyright: {
-    color: "#aaa",
-    fontSize: 12,
+  footerText: {
+    color: "#8e95bd",
     textAlign: "center",
-    marginBottom: 30,
+    marginTop: 26,
   },
-})
+});
 
-export default AboutScreen
+export default AboutScreen;

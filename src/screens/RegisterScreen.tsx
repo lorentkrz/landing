@@ -1,359 +1,451 @@
-"use client"
+"use client";
 
-import { useState } from "react"
+import { useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  TextInput,
+  Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Image,
-  Alert,
-} from "react-native"
-import { Ionicons } from "@expo/vector-icons"
-import { useNavigation } from "@react-navigation/native"
-import Button from "../components/Button"
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import DatePicker from "react-native-date-picker";
+import * as ImagePicker from "expo-image-picker";
+import Button from "../components/Button";
+import { useAppNavigation } from "../navigation/useAppNavigation";
+import { useAuth } from "../context/AuthContext";
 
 const RegisterScreen = () => {
-  const navigation = useNavigation()
-  const [firstName, setFirstName] = useState("")
-  const [lastName, setLastName] = useState("")
-  const [email, setEmail] = useState("")
-  const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [birthdate, setBirthdate] = useState(new Date())
-  const [showDatePicker, setShowDatePicker] = useState(false)
-  const [birthdateText, setBirthdateText] = useState("")
-  const [bio, setBio] = useState("")
-  const [photo, setPhoto] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const navigation = useAppNavigation();
+  const { register, isLoading } = useAuth();
 
-  const handleRegister = () => {
-    // Check if required fields are filled
-    if (!firstName.trim()) {
-      Alert.alert("Error", "Please enter your first name")
-      return
-    }
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [bio, setBio] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [birthdate, setBirthdate] = useState(new Date(2000, 0, 1));
+  const [birthdateLabel, setBirthdateLabel] = useState("");
+  const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string | undefined>>({});
+  const [referralCode, setReferralCode] = useState("");
+  const isFormValid =
+    !!firstName.trim() &&
+    !!lastName.trim() &&
+    /\S+@\S+\.\S+/.test(email.trim()) &&
+    password.length >= 6 &&
+    !!birthdateLabel;
 
-    if (!lastName.trim()) {
-      Alert.alert("Error", "Please enter your last name")
-      return
-    }
+  const ageMinimumDate = useMemo(() => {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() - 60);
+    return date;
+  }, []);
+
+  const ageMaximumDate = useMemo(() => {
+    const date = new Date();
+    date.setFullYear(date.getFullYear() - 18);
+    return date;
+  }, []);
+
+  const formatDate = (date: Date) =>
+    new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric" }).format(date);
+
+  const validate = () => {
+    const nextErrors: Record<string, string | undefined> = {};
+    if (!firstName.trim()) nextErrors.firstName = "First name is required.";
+    if (!lastName.trim()) nextErrors.lastName = "Last name is required.";
 
     if (!email.trim()) {
-      Alert.alert("Error", "Please enter your email")
-      return
+      nextErrors.email = "Email is required.";
+    } else if (!/\S+@\S+\.\S+/.test(email.trim())) {
+      nextErrors.email = "Enter a valid email address.";
     }
 
-    if (!password) {
-      Alert.alert("Error", "Please enter your password")
-      return
+    if (!password || password.length < 6) {
+      nextErrors.password = "Password must be at least 6 characters.";
     }
 
-    if (!birthdateText) {
-      Alert.alert("Error", "Please enter your birthday")
-      return
+    if (!birthdateLabel) {
+      nextErrors.birthdate = "Select your date of birth.";
     }
 
-    // Mock registration functionality with loading state
-    setLoading(true)
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
 
-    // Simulate API call delay
-    setTimeout(() => {
-      setLoading(false)
-      // Navigate to MainTabs instead of Home
-      navigation.navigate("MainTabs")
-    }, 1500)
-  }
+  const handleRegister = async () => {
+    if (!validate()) return;
 
-  const handleDateSelect = (day, month, year) => {
-    const newDate = new Date(year, month - 1, day)
-    setBirthdate(newDate)
-    setBirthdateText(`${month}/${day}/${year}`)
-    setShowDatePicker(false)
-  }
+    try {
+      const { needsVerification, email: registeredEmail } = await register({
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        email: email.trim(),
+        password,
+        bio: bio.trim(),
+        avatar: photo ?? undefined,
+        birthdate: birthdate.toISOString().split("T")[0],
+        referralCode: referralCode.trim(),
+      });
+      if (needsVerification) {
+        Alert.alert(
+          "Enter your code",
+          `We sent a 6-digit code to ${registeredEmail}. Enter it to activate your account.`,
+          [
+            {
+              text: "Continue",
+              onPress: () => navigation.navigate("VerifyEmail", { email: registeredEmail }),
+            },
+          ],
+        );
+      } else {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: "MainTabs" as never }],
+        });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Registration failed. Please try again.";
+      Alert.alert("Registration failed", message);
+    }
+  };
 
-  const handleAddPhoto = () => {
-    // Mock photo selection
-    // In a real app, you would use ImagePicker from expo-image-picker
-    setPhoto("https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=1000")
-  }
+  const handleDateConfirm = (selectedDate: Date) => {
+    setIsDatePickerVisible(false);
+    setBirthdate(selectedDate);
+    setBirthdateLabel(formatDate(selectedDate));
+    if (errors.birthdate) setErrors((prev) => ({ ...prev, birthdate: undefined }));
+  };
+
+  const handleAddPhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (permission.status !== "granted") {
+        Alert.alert("Permission required", "Allow photo library access to choose a profile picture.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
+      });
+
+      if (!result.canceled && result.assets.length > 0) {
+        setPhoto(result.assets[0]?.uri ?? null);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to pick an image right now.";
+      Alert.alert("Photo selection failed", message);
+    }
+  };
 
   return (
-    <KeyboardAvoidingView
-      style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 50 : 0}
-    >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#fff" />
-          </TouchableOpacity>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Sign up to get started</Text>
-        </View>
-
-        <View style={styles.photoContainer}>
-          {photo ? (
-            <Image source={{ uri: photo }} style={styles.profilePhoto} />
-          ) : (
-            <View style={styles.photoPlaceholder}>
-              <Ionicons name="person" size={40} color="#aaa" />
-            </View>
-          )}
-          <TouchableOpacity style={styles.addPhotoButton} onPress={handleAddPhoto}>
-            <Text style={styles.addPhotoText}>{photo ? "Change Photo" : "Add Photo"}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Ionicons name="person-outline" size={20} color="#aaa" style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="First Name *"
-              placeholderTextColor="#aaa"
-              value={firstName}
-              onChangeText={setFirstName}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Ionicons name="person-outline" size={20} color="#aaa" style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Last Name *"
-              placeholderTextColor="#aaa"
-              value={lastName}
-              onChangeText={setLastName}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Ionicons name="mail-outline" size={20} color="#aaa" style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Email *"
-              placeholderTextColor="#aaa"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Ionicons name="lock-closed-outline" size={20} color="#aaa" style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Password *"
-              placeholderTextColor="#aaa"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              autoCapitalize="none"
-            />
-            <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowPassword(!showPassword)}>
-              <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#aaa" />
+    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 20 : 0}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContainer}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <LinearGradient colors={["#1a1f33", "#05060d"]} style={styles.hero}>
+            <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+              <Ionicons name="arrow-back" size={22} color="#fff" />
             </TouchableOpacity>
-          </View>
+            <Text style={styles.kicker}>Create profile</Text>
+            <Text style={styles.title}>Tell us who’s joining the party.</Text>
+            <Text style={styles.subtitle}>Real names only. We use this to keep guest lists curated.</Text>
+          </LinearGradient>
 
-          <TouchableOpacity style={styles.inputContainer} onPress={() => setShowDatePicker(true)}>
-            <Ionicons name="calendar-outline" size={20} color="#aaa" style={styles.inputIcon} />
-            <Text style={[styles.input, !birthdateText && styles.placeholderText]}>
-              {birthdateText || "Birthday *"}
-            </Text>
-          </TouchableOpacity>
-
-          {showDatePicker && (
-            <View style={styles.datePickerModal}>
-              <View style={styles.datePickerContainer}>
-                <View style={styles.datePickerHeader}>
-                  <Text style={styles.datePickerTitle}>Select Birthday</Text>
-                  <TouchableOpacity onPress={() => setShowDatePicker(false)}>
-                    <Ionicons name="close" size={24} color="#fff" />
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.dateInputsContainer}>
-                  <View style={styles.dateInputGroup}>
-                    <Text style={styles.dateInputLabel}>Month</Text>
-                    <TextInput
-                      style={styles.dateInput}
-                      placeholder="MM"
-                      placeholderTextColor="#aaa"
-                      keyboardType="number-pad"
-                      maxLength={2}
-                      onChangeText={(text) => {
-                        const month = Number.parseInt(text) || 1
-                        const day = birthdate.getDate()
-                        const year = birthdate.getFullYear()
-                        if (month >= 1 && month <= 12) {
-                          handleDateSelect(day, month, year)
-                        }
-                      }}
-                      defaultValue={String(birthdate.getMonth() + 1)}
-                    />
-                  </View>
-
-                  <View style={styles.dateInputGroup}>
-                    <Text style={styles.dateInputLabel}>Day</Text>
-                    <TextInput
-                      style={styles.dateInput}
-                      placeholder="DD"
-                      placeholderTextColor="#aaa"
-                      keyboardType="number-pad"
-                      maxLength={2}
-                      onChangeText={(text) => {
-                        const day = Number.parseInt(text) || 1
-                        const month = birthdate.getMonth() + 1
-                        const year = birthdate.getFullYear()
-                        if (day >= 1 && day <= 31) {
-                          handleDateSelect(day, month, year)
-                        }
-                      }}
-                      defaultValue={String(birthdate.getDate())}
-                    />
-                  </View>
-
-                  <View style={styles.dateInputGroup}>
-                    <Text style={styles.dateInputLabel}>Year</Text>
-                    <TextInput
-                      style={styles.dateInput}
-                      placeholder="YYYY"
-                      placeholderTextColor="#aaa"
-                      keyboardType="number-pad"
-                      maxLength={4}
-                      onChangeText={(text) => {
-                        const year = Number.parseInt(text) || 2000
-                        const month = birthdate.getMonth() + 1
-                        const day = birthdate.getDate()
-                        if (year >= 1920 && year <= new Date().getFullYear()) {
-                          handleDateSelect(day, month, year)
-                        }
-                      }}
-                      defaultValue={String(birthdate.getFullYear())}
-                    />
-                  </View>
-                </View>
-
-                <Button
-                  title="Confirm"
-                  onPress={() => setShowDatePicker(false)}
-                  style={styles.confirmDateButton}
-                  fullWidth
-                />
+          <View style={styles.formCard}>
+            <View style={styles.photoRow}>
+              <TouchableOpacity style={styles.photoPlaceholder} onPress={handleAddPhoto}>
+                {photo ? (
+                  <Image source={{ uri: photo }} style={styles.profilePhoto} />
+                ) : (
+                  <>
+                    <Ionicons name="camera" size={24} color="#d0d5f2" />
+                    <Text style={styles.addPhotoText}>Add photo</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <View style={styles.photoCopy}>
+                <Text style={styles.photoTitle}>Your first impression</Text>
+                <Text style={styles.photoSubtitle}>Clear, recent photo only. Swap anytime from your profile.</Text>
               </View>
             </View>
-          )}
 
-          <View style={[styles.inputContainer, styles.bioContainer]}>
-            <Ionicons name="create-outline" size={20} color="#aaa" style={styles.inputIcon} />
-            <TextInput
-              style={[styles.input, styles.bioInput]}
-              placeholder="Bio (optional)"
-              placeholderTextColor="#aaa"
-              value={bio}
-              onChangeText={setBio}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-          </View>
+            <View style={styles.inputContainerTall}>
+              <Ionicons name="person-outline" size={20} color="#7f85a2" style={styles.inputIcon} />
+              <TextInput
+                style={styles.inputLarge}
+                placeholder="First name"
+                placeholderTextColor="#6c7495"
+                value={firstName}
+                onChangeText={(value) => {
+                  setFirstName(value);
+                  if (errors.firstName) setErrors((prev) => ({ ...prev, firstName: undefined }));
+                }}
+              />
+            </View>
+            <View style={styles.inputContainerTall}>
+              <Ionicons name="person-outline" size={20} color="#7f85a2" style={styles.inputIcon} />
+              <TextInput
+                style={styles.inputLarge}
+                placeholder="Last name"
+                placeholderTextColor="#6c7495"
+                value={lastName}
+                onChangeText={(value) => {
+                  setLastName(value);
+                  if (errors.lastName) setErrors((prev) => ({ ...prev, lastName: undefined }));
+                }}
+              />
+            </View>
+            {(errors.firstName || errors.lastName) && (
+              <Text style={styles.errorText}>{errors.firstName ?? errors.lastName}</Text>
+            )}
 
-          <Button
-            title="Register"
-            onPress={handleRegister}
-            style={styles.registerButton}
-            fullWidth
-            loading={loading}
-          />
+            <View style={styles.inputContainerTall}>
+              <Ionicons name="mail-outline" size={20} color="#7f85a2" style={styles.inputIcon} />
+              <TextInput
+                style={styles.inputLarge}
+                placeholder="Email"
+                placeholderTextColor="#6c7495"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={(value) => {
+                  setEmail(value);
+                  if (errors.email) setErrors((prev) => ({ ...prev, email: undefined }));
+                }}
+              />
+            </View>
+            {errors.email && <Text style={styles.errorText}>{errors.email}</Text>}
 
-          <View style={styles.loginContainer}>
-            <Text style={styles.loginText}>Already have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate("Login")}>
-              <Text style={styles.loginLink}>Login</Text>
+            <View style={styles.inputContainerTall}>
+              <Ionicons name="lock-closed-outline" size={20} color="#7f85a2" style={styles.inputIcon} />
+              <TextInput
+                style={styles.inputLarge}
+                placeholder="Password"
+                placeholderTextColor="#6c7495"
+                autoCapitalize="none"
+                secureTextEntry={!showPassword}
+                value={password}
+                onChangeText={(value) => {
+                  setPassword(value);
+                  if (errors.password) setErrors((prev) => ({ ...prev, password: undefined }));
+                }}
+              />
+              <TouchableOpacity style={styles.eyeIcon} onPress={() => setShowPassword((prev) => !prev)}>
+                <Ionicons name={showPassword ? "eye-off-outline" : "eye-outline"} size={20} color="#7f85a2" />
+              </TouchableOpacity>
+            </View>
+            {errors.password && <Text style={styles.errorText}>{errors.password}</Text>}
+
+            <View>
+              <View style={styles.inputContainerTall}>
+                <Ionicons name="gift-outline" size={20} color="#7f85a2" style={styles.inputIcon} />
+                <TextInput
+                  style={styles.inputLarge}
+                  placeholder="Referral code (optional)"
+                  placeholderTextColor="#6c7495"
+                  value={referralCode}
+                  onChangeText={(value) => setReferralCode(value.toUpperCase())}
+                  autoCapitalize="characters"
+                  maxLength={12}
+                />
+              </View>
+              <Text style={styles.helperText}>If someone invited you, enter their code to unlock bonus credits.</Text>
+            </View>
+
+            <TouchableOpacity style={styles.inputContainerTall} onPress={() => setIsDatePickerVisible(true)}>
+              <Ionicons name="calendar" size={20} color="#7f85a2" style={styles.inputIcon} />
+              <Text style={[styles.inputLarge, !birthdateLabel && styles.placeholder]}>
+                {birthdateLabel || "Birthdate"}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color="#7f85a2" />
             </TouchableOpacity>
+            {errors.birthdate && <Text style={styles.errorText}>{errors.birthdate}</Text>}
+
+            <View style={[styles.inputContainer, styles.bioContainer]}>
+              <TextInput
+                style={[styles.input, styles.bioInput]}
+                placeholder="Bio (what's your vibe?)"
+                placeholderTextColor="#6c7495"
+                multiline
+                value={bio}
+                onChangeText={(value) => setBio(value)}
+              />
+            </View>
+
+            <View style={styles.termsRow}>
+              <Ionicons name="shield-checkmark-outline" size={18} color="#4dabf7" />
+              <Text style={styles.termsCopy}>
+                By creating an account you agree to our Terms of Service and Privacy Policy.
+              </Text>
+            </View>
+
+            <Button
+              title="Create account"
+              fullWidth
+              loading={isLoading}
+              disabled={isLoading || !isFormValid}
+              onPress={handleRegister}
+            />
+
+            <View style={styles.loginRow}>
+              <Text style={styles.loginCopy}>Already have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate("Login")}>
+                <Text style={styles.loginLink}>Login</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  )
-}
+        </ScrollView>
+      </KeyboardAvoidingView>
+
+      <DatePicker
+        modal
+        mode="date"
+        open={isDatePickerVisible}
+        date={birthdate}
+        maximumDate={ageMaximumDate}
+        minimumDate={ageMinimumDate}
+        onConfirm={handleDateConfirm}
+        onCancel={() => setIsDatePickerVisible(false)}
+        theme="dark"
+      />
+    </SafeAreaView>
+  );
+};
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: "#0a0e17",
+    backgroundColor: "#030610",
+  },
+  flex: {
+    flex: 1,
   },
   scrollContainer: {
     flexGrow: 1,
-    paddingBottom: 30,
+    paddingBottom: 40,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 20,
+  hero: {
+    paddingHorizontal: 24,
+    paddingTop: 32,
+    paddingBottom: 40,
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+    gap: 8,
   },
   backButton: {
-    marginBottom: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  kicker: {
+    color: "#8c93b5",
+    textTransform: "uppercase",
+    letterSpacing: 1.5,
+    fontSize: 12,
+    fontWeight: "600",
   },
   title: {
     fontSize: 28,
-    fontWeight: "bold",
     color: "#fff",
-    marginBottom: 10,
+    fontWeight: "700",
   },
   subtitle: {
-    fontSize: 16,
-    color: "#aaa",
+    color: "#b4bad6",
+    lineHeight: 20,
   },
-  photoContainer: {
+  formCard: {
+    backgroundColor: "#0c101c",
+    marginHorizontal: 20,
+    marginTop: -30,
+    borderRadius: 20,
+    padding: 24,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 12 },
+    shadowRadius: 24,
+    elevation: 8,
+  },
+  photoRow: {
+    flexDirection: "row",
     alignItems: "center",
-    marginBottom: 20,
-  },
-  profilePhoto: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
     marginBottom: 10,
+    gap: 16,
   },
   photoPlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: "#151b30",
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
-  addPhotoButton: {
-    padding: 5,
+  profilePhoto: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
   },
   addPhotoText: {
-    color: "#fff",
-    fontSize: 14,
+    color: "#d0d5f2",
+    fontSize: 12,
+    marginTop: 6,
   },
-  form: {
-    paddingHorizontal: 20,
+  photoCopy: {
+    flex: 1,
+  },
+  photoTitle: {
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 16,
+  },
+  photoSubtitle: {
+    color: "#8c93b5",
+    marginTop: 4,
+    fontSize: 13,
   },
   inputContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderRadius: 8,
-    marginBottom: 16,
-    paddingHorizontal: 12,
+    borderRadius: 14,
+    backgroundColor: "#111628",
+    paddingHorizontal: 14,
     height: 56,
   },
-  bioContainer: {
-    height: 120,
-    alignItems: "flex-start",
-    paddingTop: 16,
+  inputContainerTall: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 16,
+    backgroundColor: "#111628",
+    paddingHorizontal: 16,
+    height: 64,
+    marginTop: 6,
   },
   inputIcon: {
     marginRight: 10,
@@ -363,88 +455,71 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
   },
-  bioInput: {
-    height: 90,
+  inputLarge: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 17,
   },
-  placeholderText: {
-    color: "#aaa",
+  placeholder: {
+    color: "#6c7495",
   },
   eyeIcon: {
-    padding: 10,
+    paddingHorizontal: 8,
+    height: "100%",
+    justifyContent: "center",
   },
-  registerButton: {
-    marginTop: 10,
-    marginBottom: 20,
-    backgroundColor: "#4dabf7", // Match your app's primary color
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
   },
-  loginContainer: {
+  spacer: {
+    width: 12,
+  },
+  bioContainer: {
+    height: 120,
+    alignItems: "flex-start",
+    paddingTop: 14,
+  },
+  bioInput: {
+    textAlignVertical: "top",
+    height: "100%",
+  },
+  helperText: {
+    color: "#6c7495",
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  termsRow: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    marginTop: 4,
+  },
+  termsCopy: {
+    color: "#8c93b5",
+    flex: 1,
+    fontSize: 13,
+  },
+  loginRow: {
     flexDirection: "row",
     justifyContent: "center",
     marginTop: 10,
   },
-  loginText: {
-    color: "#aaa",
-    fontSize: 16,
+  loginCopy: {
+    color: "#8c93b5",
   },
   loginLink: {
-    color: "#4dabf7", // Match your app's primary color
-    fontSize: 16,
-    fontWeight: "bold",
+    color: "#4dabf7",
+    fontWeight: "600",
   },
-  datePickerModal: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 1000,
+  errorText: {
+    color: "#ff6b6b",
+    fontSize: 12,
+    marginTop: -2,
+    marginBottom: 6,
+    marginLeft: 4,
   },
-  datePickerContainer: {
-    backgroundColor: "#1a1f2c",
-    borderRadius: 12,
-    padding: 20,
-    width: "80%",
-  },
-  datePickerHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  datePickerTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "bold",
-  },
-  dateInputsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
-  },
-  dateInputGroup: {
-    width: "30%",
-  },
-  dateInputLabel: {
-    color: "#aaa",
-    fontSize: 14,
-    marginBottom: 5,
-  },
-  dateInput: {
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
-    borderRadius: 8,
-    height: 50,
-    color: "#fff",
-    fontSize: 16,
-    textAlign: "center",
-    paddingHorizontal: 10,
-  },
-  confirmDateButton: {
-    marginTop: 10,
-    backgroundColor: "#4dabf7", // Match your app's primary color
-  },
-})
+});
 
-export default RegisterScreen
+export default RegisterScreen;

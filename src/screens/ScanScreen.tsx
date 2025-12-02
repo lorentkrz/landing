@@ -1,555 +1,550 @@
-"use client"
+"use client";
 
-import { useState, useEffect, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  StatusBar,
-  Animated,
   ActivityIndicator,
-  Dimensions,
-  Vibration,
   Alert,
-} from "react-native"
-import { Ionicons } from "@expo/vector-icons"
-import { useNavigation } from "@react-navigation/native"
-import Header from "../components/Header"
-import Button from "../components/Button"
-import { useVenues } from "../context/VenueContext"
+  Animated,
+  Dimensions,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  Vibration,
+  View,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
+import { CameraView, useCameraPermissions, type BarcodeScanningResult } from "expo-camera";
+import { Ionicons } from "@expo/vector-icons";
+import * as Location from "expo-location";
+import Button from "../components/Button";
+import { useVenues } from "../context/VenueContext";
+import { useAppNavigation } from "../navigation/useAppNavigation";
+import { haversineKm } from "../utils/geo";
+import { track } from "../utils/analytics";
 
-const { width, height } = Dimensions.get("window")
-
-// Mock component for preview mode - will be replaced by real Camera in production
-const MockCameraView = ({ children, style, flashMode }) => {
-  return (
-    <View style={[style, { backgroundColor: "#1e1e1e" }]}>
-      {flashMode === "on" && <View style={styles.flashOverlay} />}
-      {children}
-    </View>
-  )
-}
+const { width } = Dimensions.get("window");
 
 const ScanScreen = () => {
-  const navigation = useNavigation()
-  const { venues, checkInToVenue } = useVenues()
-  const [hasPermission, setHasPermission] = useState(null)
-  const [scanning, setScanning] = useState(true)
-  const [flashOn, setFlashOn] = useState(false)
-  const [scanned, setScanned] = useState(false)
-  const [processing, setProcessing] = useState(false)
-  const [recentCheckIns, setRecentCheckIns] = useState([
-    { id: "1", name: "Pulse Nightclub", time: "Yesterday, 11:30 PM", venueId: "1" },
-    { id: "2", name: "Sky Lounge", time: "Last week, 10:15 PM", venueId: "2" },
-    { id: "3", name: "Club Onyx", time: "2 weeks ago, 1:05 AM", venueId: "3" },
-  ])
+  const navigation = useAppNavigation();
+  const { venues, checkInToVenue } = useVenues();
+  const [permission, requestPermission] = useCameraPermissions();
+  const [flashOn, setFlashOn] = useState(false);
+  const [scanned, setScanned] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
 
-  // Animation refs
-  const frameAnim = useRef(new Animated.Value(0)).current
-  const scanLineAnim = useRef(new Animated.Value(0)).current
-  const pulseAnim = useRef(new Animated.Value(0)).current
+  const frameAnim = useRef(new Animated.Value(0)).current;
+  const scanLineAnim = useRef(new Animated.Value(0)).current;
 
-  // Request camera permissions on mount
   useEffect(() => {
-    const getCameraPermissions = async () => {
-      try {
-        // For demo purposes, simulate permission request
-        await new Promise((resolve) => setTimeout(resolve, 1000))
-        setHasPermission(true)
-      } catch (error) {
-        console.error("Error requesting camera permission:", error)
-        setHasPermission(false)
-      }
-    }
+    requestPermission();
+  }, [requestPermission]);
 
-    getCameraPermissions()
-  }, [])
-
-  // Start animations when scanning
   useEffect(() => {
-    if (scanning && !scanned) {
-      // Frame animation
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(frameAnim, {
-            toValue: 1,
-            duration: 1500,
-            useNativeDriver: false,
-          }),
-          Animated.timing(frameAnim, {
-            toValue: 0,
-            duration: 1500,
-            useNativeDriver: false,
-          }),
-        ]),
-      ).start()
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(frameAnim, { toValue: 1, duration: 1500, useNativeDriver: false }),
+        Animated.timing(frameAnim, { toValue: 0, duration: 1500, useNativeDriver: false }),
+      ]),
+    ).start();
 
-      // Scan line animation
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(scanLineAnim, {
-            toValue: 1,
-            duration: 2000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(scanLineAnim, {
-            toValue: 0,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-      ).start()
-
-      // Pulse animation
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 0,
-            duration: 1000,
-            useNativeDriver: true,
-          }),
-        ]),
-      ).start()
-    } else {
-      // Stop animations
-      frameAnim.stopAnimation()
-      scanLineAnim.stopAnimation()
-      pulseAnim.stopAnimation()
-    }
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(scanLineAnim, { toValue: 1, duration: 2200, useNativeDriver: true }),
+        Animated.timing(scanLineAnim, { toValue: 0, duration: 0, useNativeDriver: true }),
+      ]),
+    ).start();
 
     return () => {
-      frameAnim.stopAnimation()
-      scanLineAnim.stopAnimation()
-      pulseAnim.stopAnimation()
-    }
-  }, [scanning, scanned])
+      frameAnim.stopAnimation();
+      scanLineAnim.stopAnimation();
+    };
+  }, [frameAnim, scanLineAnim]);
 
-  // Animation interpolations
-  const borderColor = frameAnim.interpolate({
+  const frameBorderColor = frameAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ["rgba(77, 171, 247, 0.4)", "rgba(77, 171, 247, 1)"],
-  })
-
-  const borderWidth = frameAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1.5, 3.5],
-  })
+    outputRange: ["rgba(77,171,247,0.5)", "rgba(77,171,247,1)"],
+  });
 
   const scanLineTranslateY = scanLineAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [-(width * 0.3), width * 0.3],
-  })
+  });
 
-  const pulseOpacity = pulseAnim.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0.4, 0.7, 0.4],
-  })
+  const permissionCopy = useMemo(
+    () => ({
+      title: "Camera permission required",
+      description: "Allow access so you can scan the venue QR code at the entrance.",
+    }),
+    [],
+  );
 
-  // Handle barcode scanning
-  const handleBarCodeScanned = ({ type, data }) => {
-    if (scanned || processing) return
+  const resolveVenueId = (rawData: string | undefined) => {
+    if (!rawData) return null;
+    if (rawData.includes(":")) {
+      const [, id] = rawData.split(":");
+      if (id && venues.some((venue) => venue.id === id)) {
+        return id;
+      }
+    }
+    return venues[0]?.id ?? null;
+  };
 
-    setScanned(true)
-    setProcessing(true)
+  const processScan = async (data: string) => {
+    if (scanned || processing) return;
+    setScanned(true);
+    setProcessing(true);
+    Vibration.vibrate(150);
 
-    // Provide haptic feedback
-    Vibration.vibrate(200)
-
-    // Process QR code data
     try {
-      // In a real app, parse the QR code data to get venue information
-      // For demo purposes, we'll just navigate to a venue
-      setTimeout(() => {
-        setProcessing(false)
+      const venueId = resolveVenueId(data);
+      if (!venueId) throw new Error("Unknown venue");
 
-        // Add to recent check-ins
-        const newCheckIn = {
-          id: Date.now().toString(),
-          name: "Scanned Venue",
-          time: "Just now",
-          venueId: "1",
-        }
-
-        setRecentCheckIns([newCheckIn, ...recentCheckIns.slice(0, 2)])
-
-        // Navigate to venue details
-        navigation.navigate("VenueDetails", { venueId: "1" })
-      }, 1500)
+      await checkInToVenue(venueId);
+      track("check_in", { via: "qr", venueId });
+      navigation.navigate("VenueDetails", { venueId });
     } catch (error) {
-      setProcessing(false)
-      setScanned(false)
-      Alert.alert("Invalid QR Code", "The scanned code is not a valid venue QR code.")
+      Alert.alert("Invalid QR code", "This code is not linked to a venue on Nataa.");
+      setScanned(false);
+    } finally {
+      setProcessing(false);
     }
-  }
+  };
 
-  // Manual scan for demo purposes
-  const handleManualScan = () => {
-    if (processing) return
+  const handleLocationCheckIn = async () => {
+    if (processing || isLocating) return;
+    setIsLocating(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Location needed", "Enable location to find the closest venue.");
+        return;
+      }
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const { latitude, longitude } = position.coords;
+      const nearest = venues
+        .map((venue) => ({
+          venue,
+          distanceKm: haversineKm(latitude, longitude, venue.latitude, venue.longitude),
+        }))
+        .filter((v) => typeof v.distanceKm === "number")
+        .sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity))[0];
 
-    if (scanned) {
-      // Reset scanner
-      setScanned(false)
-      setScanning(true)
-      return
+      if (!nearest || nearest.distanceKm === null || nearest.distanceKm === undefined) {
+        Alert.alert("No venues nearby", "We couldn't find a venue close enough. Try scanning the QR instead.");
+        return;
+      }
+
+      if (nearest.distanceKm > 0.5) {
+        Alert.alert(
+          "Too far away",
+          `The closest venue is ${nearest.distanceKm.toFixed(1)} km away. Move closer or scan the venue QR.`,
+        );
+        return;
+      }
+
+      await checkInToVenue(nearest.venue.id);
+      track("check_in", { via: "geo", venueId: nearest.venue.id, distanceKm: nearest.distanceKm });
+      navigation.navigate("VenueDetails", { venueId: nearest.venue.id });
+    } catch (error) {
+      console.warn("Location check-in failed", error);
+      Alert.alert("Could not check in", "Turn on location services and try again.");
+    } finally {
+      setIsLocating(false);
     }
+  };
 
-    // Simulate scanning
-    handleBarCodeScanned({ type: "qr", data: "venue:1" })
-  }
+  const handleBarcodeScanned = ({ data }: BarcodeScanningResult) => {
+    if (data) processScan(data);
+  };
 
-  // Toggle flash
-  const toggleFlash = () => {
-    setFlashOn(!flashOn)
-  }
-
-  // Handle gallery selection
-  const handleGallerySelect = () => {
-    Alert.alert("Select from Gallery", "This feature would allow you to select a QR code image from your gallery.", [
-      { text: "OK" },
-    ])
-  }
-
-  // Loading state
-  if (hasPermission === null) {
+  if (!permission) {
     return (
-      <View style={styles.permissionContainer}>
+      <View style={[styles.safeArea, styles.center]}>
         <ActivityIndicator size="large" color="#4dabf7" />
-        <Text style={styles.permissionText}>Requesting camera permission...</Text>
+        <Text style={styles.loadingText}>Requesting camera access…</Text>
       </View>
-    )
+    );
   }
 
-  // Permission denied state
-  if (hasPermission === false) {
+  if (!permission.granted) {
     return (
-      <View style={styles.permissionContainer}>
-        <Ionicons name="camera-off-outline" size={60} color="#4dabf7" />
-        <Text style={styles.permissionTitle}>Camera Access Required</Text>
-        <Text style={styles.permissionText}>
-          Please grant camera permission to scan QR codes and check in to venues.
-        </Text>
-        <Button title="Grant Permission" onPress={() => setHasPermission(true)} style={styles.permissionButton} />
-      </View>
-    )
+      <SafeAreaView style={[styles.safeArea, styles.center]} edges={["top", "bottom"]}>
+        <Ionicons name="camera-outline" size={48} color="#4dabf7" />
+        <Text style={styles.permissionTitle}>{permissionCopy.title}</Text>
+        <Text style={styles.permissionDescription}>{permissionCopy.description}</Text>
+        <Button title="Grant permission" onPress={requestPermission} style={styles.permissionButton} />
+      </SafeAreaView>
+    );
   }
 
   return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-      <Header title="Scan QR Code" showBackButton />
+    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+      <View style={styles.headerRow}>
+        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back" size={20} color="#fff" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Check in</Text>
+        <TouchableOpacity style={styles.helpButton} onPress={() => navigation.navigate("HelpCenter")}>
+          <Ionicons name="help-circle" size={22} color="#9fb3ff" />
+        </TouchableOpacity>
+      </View>
 
-      <View style={styles.cameraContainer}>
-        {/* In a real app, replace MockCameraView with Camera component */}
-        <MockCameraView style={styles.camera} flashMode={flashOn ? "on" : "off"}>
-          <View style={styles.scannerOverlay}>
-            <View style={styles.dimOverlay} />
+      <LinearGradient colors={["#141937", "#080b18"]} style={styles.heroCard}>
+        <View style={styles.heroText}>
+          <Text style={styles.heroKicker}>Step 1</Text>
+          <Text style={styles.heroTitle}>Scan the QR code at the entrance.</Text>
+          <Text style={styles.heroSubtitle}>
+            Unlock the live guest list, active rooms, and conversation credits for this venue.
+          </Text>
+        </View>
+        <View style={styles.heroIcons}>
+          <View style={styles.heroIcon}>
+            <Ionicons name="qr-code-outline" size={26} color="#fff" />
+          </View>
+          <View style={styles.heroIcon}>
+            <Ionicons name="sparkles-outline" size={26} color="#fff" />
+          </View>
+        </View>
+      </LinearGradient>
 
-            {/* Scanning frame */}
-            <Animated.View
-              style={[
-                styles.scanSquare,
-                {
-                  borderColor,
-                  borderWidth,
-                },
-              ]}
-            >
-              {/* Corner markers */}
-              <View style={[styles.cornerMarker, styles.topLeftMarker]} />
-              <View style={[styles.cornerMarker, styles.topRightMarker]} />
-              <View style={[styles.cornerMarker, styles.bottomLeftMarker]} />
-              <View style={[styles.cornerMarker, styles.bottomRightMarker]} />
-
-              {/* Scanning line */}
-              {scanning && !scanned && (
-                <Animated.View style={[styles.scanLine, { transform: [{ translateY: scanLineTranslateY }] }]} />
-              )}
-
-              {/* Processing indicator */}
-              {processing && (
-                <View style={styles.processingContainer}>
-                  <Animated.View style={[styles.processingPulse, { opacity: pulseOpacity }]} />
-                  <ActivityIndicator size="large" color="#4dabf7" />
-                  <Text style={styles.processingText}>Processing...</Text>
-                </View>
-              )}
-            </Animated.View>
-
-            {/* Instructions */}
-            <View style={styles.instructions}>
-              <Text style={styles.scanTitle}>
-                {scanned ? "QR Code Detected" : processing ? "Processing QR Code" : "Hold your phone up to the QR code"}
-              </Text>
-              <Text style={styles.scanSubtitle}>
-                {scanned
-                  ? "Tap 'Try Again' to scan another code"
-                  : processing
-                    ? "Please wait while we verify the venue"
-                    : "The code will be scanned automatically"}
-              </Text>
+      <View style={styles.cameraWrapper}>
+        <CameraView
+          style={styles.camera}
+          facing="back"
+          barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+          onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
+          enableTorch={flashOn}
+        >
+          <View style={styles.overlay}>
+            <View style={styles.overlayTop} />
+            <View style={styles.overlayMiddle}>
+              <View style={styles.overlaySide} />
+              <View style={styles.scanFrameWrapper}>
+                <Animated.View style={[styles.scanFrame, { borderColor: frameBorderColor }]}>
+                  <Animated.View style={[styles.scanLine, { transform: [{ translateY: scanLineTranslateY }] }]} />
+                  <View style={[styles.corner, styles.cornerTL]} />
+                  <View style={[styles.corner, styles.cornerTR]} />
+                  <View style={[styles.corner, styles.cornerBL]} />
+                  <View style={[styles.corner, styles.cornerBR]} />
+                </Animated.View>
+              </View>
+              <View style={styles.overlaySide} />
+            </View>
+            <View style={styles.overlayBottom}>
+              <Text style={styles.overlayTitle}>Align the QR code inside the frame</Text>
+              <Text style={styles.overlaySubtitle}>It usually sits near the entrance or host stand.</Text>
             </View>
           </View>
-        </MockCameraView>
+        </CameraView>
       </View>
 
-      {/* Controls */}
-      <View style={styles.controls}>
-        <TouchableOpacity style={[styles.controlIcon, flashOn && styles.activeControl]} onPress={toggleFlash}>
-          <Ionicons name={flashOn ? "flash" : "flash-outline"} size={24} color="#fff" />
-        </TouchableOpacity>
-
-        <Button
-          title={processing ? "Processing..." : scanned ? "Try Again" : "Scan QR Code"}
-          icon={scanned ? "refresh" : "scan-outline"}
-          loading={processing}
-          onPress={handleManualScan}
-          style={styles.scanButton}
-        />
-
-        <TouchableOpacity style={styles.controlIcon} onPress={handleGallerySelect}>
-          <Ionicons name="images-outline" size={24} color="#fff" />
-        </TouchableOpacity>
+      <View style={styles.bottomCard}>
+        <View style={styles.bottomRow}>
+          <TouchableOpacity
+            style={[styles.controlButton, flashOn && styles.controlButtonActive]}
+            onPress={() => setFlashOn((prev) => !prev)}
+          >
+            <Ionicons name={flashOn ? "flash" : "flash-off"} size={20} color="#fff" />
+            <Text style={styles.controlText}>{flashOn ? "Flash on" : "Flash off"}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.controlButton}
+            onPress={() => {
+              setScanned(false)
+              setProcessing(false)
+            }}
+          >
+            <Ionicons name="refresh" size={20} color="#fff" />
+            <Text style={styles.controlText}>Reset scanner</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.controlButton} onPress={() => navigation.navigate("HelpCenter")}>
+            <Ionicons name="information-circle" size={20} color="#fff" />
+            <Text style={styles.controlText}>Where to find it?</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.statusRow}>
+          <View style={[styles.statusDot, scanned ? styles.statusDotScanning : styles.statusDotIdle]} />
+          <Text style={styles.statusText}>
+            {processing ? "Validating QR code..." : scanned ? "Processing..." : "Ready to scan"}
+          </Text>
+        </View>
+        <View style={styles.bottomActions}>
+          <Button
+            title={processing ? "Checking in..." : "Refresh QR"}
+            onPress={() => {
+              setScanned(false)
+              setProcessing(false)
+            }}
+            disabled={processing}
+            variant="outline"
+            style={{ flex: 1 }}
+          />
+          <Button
+            title={isLocating ? "Locating..." : "Use my location"}
+            onPress={handleLocationCheckIn}
+            disabled={processing || isLocating}
+            loading={isLocating}
+            style={{ flex: 1 }}
+          />
+        </View>
       </View>
-
-      {/* Recent check-ins */}
-      <View style={styles.recentScans}>
-        <Text style={styles.recentTitle}>Recent Check-ins</Text>
-
-        {recentCheckIns.length > 0 ? (
-          recentCheckIns.map((item) => (
-            <TouchableOpacity
-              key={item.id}
-              style={styles.recentItem}
-              onPress={() => navigation.navigate("VenueDetails", { venueId: item.venueId })}
-            >
-              <Ionicons name="time-outline" size={20} color="#4dabf7" style={{ marginRight: 12 }} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.recentName}>{item.name}</Text>
-                <Text style={styles.recentTime}>{item.time}</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#aaa" />
-            </TouchableOpacity>
-          ))
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No recent check-ins</Text>
-          </View>
-        )}
-      </View>
-    </View>
-  )
-}
+    </SafeAreaView>
+  );
+};
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: "#0a0e17",
+    backgroundColor: "#03050f",
   },
-  permissionContainer: {
+  center: {
     flex: 1,
-    backgroundColor: "#0a0e17",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: 24,
+    backgroundColor: "#03050f",
+  },
+  loadingText: {
+    marginTop: 12,
+    color: "#94a2d6",
   },
   permissionTitle: {
     color: "#fff",
     fontSize: 20,
-    fontWeight: "600",
-    marginTop: 20,
-    marginBottom: 10,
+    fontWeight: "700",
+    marginTop: 16,
   },
-  permissionText: {
-    color: "#aaa",
-    fontSize: 16,
+  permissionDescription: {
+    color: "#94a2d6",
     textAlign: "center",
-    marginTop: 10,
+    marginTop: 6,
+    paddingHorizontal: 30,
   },
   permissionButton: {
-    marginTop: 20,
+    marginTop: 18,
+    width: "70%",
   },
-  cameraContainer: {
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 6,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  helpButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  heroCard: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 24,
+    padding: 20,
+    flexDirection: "row",
+    gap: 18,
+    alignItems: "center",
+  },
+  heroText: {
     flex: 1,
-    margin: 20,
-    borderRadius: 16,
+    gap: 6,
+  },
+  heroKicker: {
+    color: "#8f96bb",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    fontSize: 12,
+  },
+  heroTitle: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  heroSubtitle: {
+    color: "#b7beda",
+    fontSize: 13,
+  },
+  heroIcons: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  heroIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  cameraWrapper: {
+    flex: 1,
+    marginHorizontal: 20,
+    marginTop: 16,
+    borderRadius: 28,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
   },
   camera: {
     flex: 1,
-    justifyContent: "center",
+  },
+  overlay: {
+    flex: 1,
+  },
+  overlayTop: {
+    flex: 1,
+    backgroundColor: "rgba(3,5,16,0.65)",
+  },
+  overlayMiddle: {
+    flexDirection: "row",
+    height: width * 0.75,
+  },
+  overlaySide: {
+    flex: 1,
+    backgroundColor: "rgba(3,5,16,0.65)",
+  },
+  scanFrameWrapper: {
+    width: width * 0.75,
     alignItems: "center",
-  },
-  flashOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255, 255, 200, 0.15)",
-  },
-  scannerOverlay: {
-    width: "100%",
-    height: "100%",
     justifyContent: "center",
+  },
+  scanFrame: {
+    width: width * 0.7,
+    height: width * 0.7,
+    borderWidth: 2,
+    borderRadius: 20,
     alignItems: "center",
-    position: "relative",
-  },
-  dimOverlay: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    backgroundColor: "rgba(10,10,10,0.5)",
-  },
-  scanSquare: {
-    width: width * 0.6,
-    height: width * 0.6,
-    borderRadius: 12,
-    position: "relative",
     justifyContent: "center",
-    alignItems: "center",
-  },
-  cornerMarker: {
-    position: "absolute",
-    width: 20,
-    height: 20,
-    borderColor: "#4dabf7",
-  },
-  topLeftMarker: {
-    top: -2,
-    left: -2,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
-    borderTopLeftRadius: 8,
-  },
-  topRightMarker: {
-    top: -2,
-    right: -2,
-    borderTopWidth: 3,
-    borderRightWidth: 3,
-    borderTopRightRadius: 8,
-  },
-  bottomLeftMarker: {
-    bottom: -2,
-    left: -2,
-    borderBottomWidth: 3,
-    borderLeftWidth: 3,
-    borderBottomLeftRadius: 8,
-  },
-  bottomRightMarker: {
-    bottom: -2,
-    right: -2,
-    borderBottomWidth: 3,
-    borderRightWidth: 3,
-    borderBottomRightRadius: 8,
   },
   scanLine: {
-    width: "85%",
+    position: "absolute",
+    width: "80%",
     height: 2,
     backgroundColor: "#4dabf7",
-    position: "absolute",
   },
-  processingContainer: {
+  corner: {
     position: "absolute",
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
+    width: 24,
+    height: 24,
+    borderColor: "#4dabf7",
+  },
+  cornerTL: {
+    top: 0,
+    left: 0,
+    borderTopWidth: 2,
+    borderLeftWidth: 2,
+  },
+  cornerTR: {
+    top: 0,
+    right: 0,
+    borderTopWidth: 2,
+    borderRightWidth: 2,
+  },
+  cornerBL: {
+    bottom: 0,
+    left: 0,
+    borderBottomWidth: 2,
+    borderLeftWidth: 2,
+  },
+  cornerBR: {
+    bottom: 0,
+    right: 0,
+    borderBottomWidth: 2,
+    borderRightWidth: 2,
+  },
+  overlayBottom: {
+    padding: 20,
+    backgroundColor: "rgba(3,5,16,0.65)",
     alignItems: "center",
-    backgroundColor: "rgba(10, 14, 23, 0.7)",
-    borderRadius: 12,
   },
-  processingPulse: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    borderRadius: 12,
-    backgroundColor: "#4dabf7",
-  },
-  processingText: {
+  overlayTitle: {
     color: "#fff",
     fontSize: 16,
-    fontWeight: "600",
-    marginTop: 10,
+    fontWeight: "700",
   },
-  instructions: {
-    position: "absolute",
-    top: 50,
-    alignItems: "center",
-    paddingHorizontal: 20,
-  },
-  scanTitle: {
-    color: "#fff",
-    fontSize: 18,
-    fontWeight: "600",
+  overlaySubtitle: {
+    color: "#9da4ca",
     textAlign: "center",
+    marginTop: 6,
   },
-  scanSubtitle: {
-    color: "#aaa",
-    fontSize: 14,
-    marginTop: 4,
-    textAlign: "center",
-  },
-  controls: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
+  bottomCard: {
+    backgroundColor: "#0b0f1f",
+    marginHorizontal: 20,
+    marginTop: 18,
+    borderRadius: 24,
+    padding: 18,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.04)",
     marginBottom: 20,
   },
-  controlIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: "#1a1f2c",
-    justifyContent: "center",
-    alignItems: "center",
+  bottomRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 10,
   },
-  activeControl: {
-    backgroundColor: "#4dabf7",
-  },
-  scanButton: {
+  controlButton: {
     flex: 1,
-    marginHorizontal: 15,
+    borderRadius: 16,
+    backgroundColor: "#151b33",
+    paddingVertical: 10,
+    alignItems: "center",
+    gap: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
   },
-  recentScans: {
-    paddingHorizontal: 20,
-    paddingBottom: 30,
+  controlButtonActive: {
+    borderColor: "#4dabf7",
+    backgroundColor: "rgba(77,171,247,0.15)",
   },
-  recentTitle: {
+  controlText: {
     color: "#fff",
-    fontSize: 18,
+    fontSize: 12,
     fontWeight: "600",
-    marginBottom: 10,
   },
-  recentItem: {
+  bottomActions: {
+    flexDirection: "row",
+    gap: 10,
+  },
+  statusRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#151a25",
-    padding: 15,
-    borderRadius: 12,
-    marginBottom: 10,
+    gap: 8,
   },
-  recentName: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: "#4dabf7",
   },
-  recentTime: {
-    color: "#aaa",
-    fontSize: 12,
-    marginTop: 2,
+  statusDotIdle: {
+    opacity: 0.5,
   },
-  emptyState: {
-    backgroundColor: "#151a25",
-    padding: 20,
-    borderRadius: 12,
-    alignItems: "center",
+  statusDotScanning: {
+    opacity: 1,
   },
-  emptyStateText: {
-    color: "#aaa",
-    fontSize: 14,
+  statusText: {
+    color: "#a0a7c7",
+    fontSize: 13,
   },
-})
+});
 
-export default ScanScreen
+export default ScanScreen;

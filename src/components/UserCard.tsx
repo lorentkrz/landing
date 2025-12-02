@@ -1,7 +1,9 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { User } from '../types';
+"use client";
+
+import React from "react";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import type { User } from "../types";
 
 interface UserCardProps {
   user: User;
@@ -10,33 +12,30 @@ interface UserCardProps {
 }
 
 const UserCard: React.FC<UserCardProps> = ({ user, onPress, style }) => {
+  const fullName = `${user.firstName} ${user.lastName}`;
   return (
-    <TouchableOpacity 
-      style={[styles.container, style]} 
-      onPress={() => onPress(user)}
-      activeOpacity={0.8}
-    >
-      <View style={styles.avatarContainer}>
+    <TouchableOpacity style={[styles.card, style]} activeOpacity={0.9} onPress={() => onPress(user)}>
+      <View style={styles.avatarWrapper}>
         <Image source={{ uri: user.avatar }} style={styles.avatar} />
-        {user.isOnline && <View style={styles.onlineIndicator} />}
+        <View style={[styles.statusDot, user.isOnline && styles.statusDotOnline]} />
       </View>
-      
-      <View style={styles.content}>
-        <Text style={styles.name}>{user.firstName} {user.lastName}</Text>
-        
-        <View style={styles.infoRow}>
-          <Text style={styles.infoText}>{user.age}</Text>
-          <Text style={styles.dot}>•</Text>
-          <Text style={styles.infoText}>{user.gender}</Text>
+      <View style={styles.info}>
+        <View style={styles.row}>
+          <Text style={styles.name}>{fullName}</Text>
+          <View style={styles.tag}>
+            <Ionicons name="sparkles" size={12} color="#fff" />
+            <Text style={styles.tagText}>Tonight</Text>
+          </View>
         </View>
-        
+        <Text style={styles.meta}>{user.age ? `${user.age} • ${user.gender ?? "—"}` : user.gender ?? "—"}</Text>
         <View style={styles.locationRow}>
-          <Ionicons name="location-outline" size={14} color="#aaa" />
-          <Text style={styles.locationText}>{user.city}, {user.country}</Text>
+          <Ionicons name="location-outline" size={14} color="#8f96bb" />
+          <Text style={styles.locationText}>
+            {user.city}, {user.country}
+          </Text>
         </View>
       </View>
-      
-      <TouchableOpacity style={styles.connectButton} onPress={() => onPress(user)}>
+      <TouchableOpacity style={styles.chatButton} onPress={() => onPress(user)}>
         <Ionicons name="chatbubble-outline" size={18} color="#fff" />
       </TouchableOpacity>
     </TouchableOpacity>
@@ -44,78 +43,89 @@ const UserCard: React.FC<UserCardProps> = ({ user, onPress, style }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1a1f2c',
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+  card: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 22,
+    padding: 14,
+    backgroundColor: "#11162b",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.04)",
+    gap: 12,
   },
-  avatarContainer: {
-    position: 'relative',
-    marginRight: 12,
+  avatarWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    overflow: "hidden",
+    position: "relative",
   },
   avatar: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
+    width: "100%",
+    height: "100%",
   },
-  onlineIndicator: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#4dabf7',
+  statusDot: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#5a607c",
     borderWidth: 2,
-    borderColor: '#1a1f2c',
+    borderColor: "#11162b",
   },
-  content: {
+  statusDotOnline: {
+    backgroundColor: "#58d594",
+  },
+  info: {
     flex: 1,
+    gap: 6,
+  },
+  row: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
   },
   name: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 4,
+    fontWeight: "600",
   },
-  infoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 4,
+  tag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
-  infoText: {
-    color: '#aaa',
-    fontSize: 14,
+  tagText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "600",
   },
-  dot: {
-    color: '#aaa',
-    fontSize: 14,
-    marginHorizontal: 4,
+  meta: {
+    color: "#c6cbe3",
   },
   locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   locationText: {
-    color: '#aaa',
-    fontSize: 12,
-    marginLeft: 4,
+    color: "#8f96bb",
+    fontSize: 13,
   },
-  connectButton: {
+  chatButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#4dabf7',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "#4dabf7",
+    justifyContent: "center",
+    alignItems: "center",
   },
 });
 

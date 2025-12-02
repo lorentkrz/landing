@@ -1,48 +1,71 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  RefreshControl,
   FlatList,
-  StatusBar,
   Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import VenueCard from "../components/VenueCard";
 import Button from "../components/Button";
+import CreditBanner from "../components/CreditBanner";
+import VenueCard from "../components/VenueCard";
+import StoryRail from "../components/StoryRail";
+import { useAppNavigation } from "../navigation/useAppNavigation";
 import { useAuth } from "../context/AuthContext";
 import { useVenues } from "../context/VenueContext";
 import { useCredits } from "../context/CreditsContext";
+import { useReferrals } from "../context/ReferralContext";
+import { track } from "../utils/analytics";
 import type { Venue } from "../types";
 
 const HomeScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useAppNavigation();
   const { user } = useAuth();
   const { venues, activeCheckIn, refreshVenues } = useVenues();
   const { credits } = useCredits();
+  const { createInvite, inviterReward, inviteeReward } = useReferrals();
 
   const [refreshing, setRefreshing] = useState(false);
-  const [featuredVenues, setFeaturedVenues] = useState<Venue[]>([]);
-  const [nearbyVenues, setNearbyVenues] = useState<Venue[]>([]);
-  const [recentVenues, setRecentVenues] = useState<Venue[]>([]);
 
   useEffect(() => {
-    if (venues && venues.length > 0) {
-      setFeaturedVenues(venues.filter((venue) => venue.rating >= 4.7).slice(0, 4));
-      setNearbyVenues(venues.slice(0, 4));
-      setRecentVenues(venues.slice(2, 6));
-    } else {
-      setFeaturedVenues([]);
-      setNearbyVenues([]);
-      setRecentVenues([]);
-    }
+    track("navigation", { screen: "Home" });
+  }, []);
+
+  const featuredVenues = useMemo(() => {
+    const byFlag = venues.filter((venue) => venue.isFeatured);
+    if (byFlag.length) return byFlag.slice(0, 5);
+    // fallback: top-rated
+    return [...venues].sort((a, b) => (b.rating ?? 0) - (a.rating ?? 0)).slice(0, 5);
   }, [venues]);
+  const nearbyVenues = useMemo(
+    () =>
+      [...venues]
+        .sort((a, b) => (a.distanceKm ?? Number.MAX_SAFE_INTEGER) - (b.distanceKm ?? Number.MAX_SAFE_INTEGER))
+        .slice(0, 6),
+    [venues],
+  );
+  const trendingVenues = useMemo(
+    () =>
+      [...venues]
+        .sort(
+          (a, b) =>
+            (b.activeUsers ?? 0) * 2 + (b.rating ?? 0) - ((a.activeUsers ?? 0) * 2 + (a.rating ?? 0)),
+        )
+        .slice(0, 6),
+    [venues],
+  );
+  const recentVenues = useMemo(() => venues.slice(3, 9), [venues]);
+
+  const currentVenue = activeCheckIn?.venueId ? venues.find((v) => v.id === activeCheckIn.venueId) : undefined;
+  const locationLabel = user?.city && user?.country ? `${user.city}, ${user.country}` : user?.city ?? "Your city";
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -50,334 +73,561 @@ const HomeScreen = () => {
     setRefreshing(false);
   };
 
-  const handleVenuePress = (venue: Venue) => {
-    navigation.navigate("VenueDetails", { venueId: venue.id });
-  };
+  const handleVenuePress = (venue: Venue) => navigation.navigate("VenueDetails", { venueId: venue.id });
 
-  const handleScanPress = () => {
-    navigation.navigate("Scan");
-  };
+  const quickActions = [
+    {
+      icon: activeCheckIn ? "sparkles" : "scan-outline",
+      title: activeCheckIn ? "You're checked-in" : "Check in tonight",
+      subtitle: activeCheckIn ? currentVenue?.name ?? "Active for 2h" : "Scan a QR to unlock venues",
+      onPress: activeCheckIn
+        ? () => navigation.navigate("VenueDetails", { venueId: activeCheckIn.venueId })
+        : () => navigation.navigate("Scan"),
+      tint: "rgba(77, 171, 247, 0.3)",
+    },
+    {
+      icon: "flash-outline",
+      title: "Buy credits",
+      subtitle: "Keep chats going",
+      onPress: () => navigation.navigate("Credits"),
+      tint: "rgba(212, 142, 255, 0.25)",
+    },
+    {
+      icon: "chatbubbles-outline",
+      title: "Messages",
+      subtitle: "Continue connections",
+      onPress: () => navigation.navigate("Messages"),
+      tint: "rgba(255, 116, 139, 0.25)",
+    },
+    {
+      icon: "map-outline",
+      title: "Map view",
+      subtitle: "See it on a map",
+      onPress: () => navigation.navigate("Map"),
+      tint: "rgba(255, 206, 116, 0.25)",
+    },
+  ] as const;
 
-  const handleProfilePress = () => {
-    navigation.navigate("Profile");
-  };
+  const renderFeaturedVenue = ({ item }: { item: Venue }) => (
+    <VenueCard venue={item} onPress={handleVenuePress} style={styles.featuredCard} />
+  );
 
-  const renderVenueItem = ({ item }: { item: Venue }) => <VenueCard venue={item} onPress={handleVenuePress} />;
-  const renderRecentVenueItem = ({ item }: { item: Venue }) => <VenueCard venue={item} onPress={handleVenuePress} compact />;
-
-  return (
-    <View style={styles.container}>
-      <StatusBar barStyle="light-content" />
-
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hello, {user?.firstName || "Guest"}</Text>
-          <Text style={styles.headerTitle}>Find your vibe</Text>
-        </View>
-
-        <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.creditsButton} onPress={() => navigation.navigate("Credits")}>
-            <Ionicons name="flash" size={16} color="#4dabf7" />
-            <Text style={styles.creditsText}>{credits}</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.profileButton} onPress={handleProfilePress}>
-            {user?.avatar ? (
-              <Image source={{ uri: user.avatar }} style={styles.profileImage} />
-            ) : (
-              <Ionicons name="person-circle-outline" size={28} color="#fff" />
-            )}
-          </TouchableOpacity>
+  const renderRecentVenue = (venue: Venue) => (
+    <TouchableOpacity key={venue.id} style={styles.listItem} onPress={() => handleVenuePress(venue)}>
+      <Image source={{ uri: venue.image }} style={styles.listItemImage} />
+      <View style={styles.listItemContent}>
+        <Text style={styles.listItemTitle}>{venue.name}</Text>
+        <Text style={styles.listItemSubtitle}>
+          {venue.type} - {venue.city}
+        </Text>
+        <View style={styles.listItemMeta}>
+          <View style={styles.metaPill}>
+            <Ionicons name="people-outline" size={12} color="#fff" />
+            <Text style={styles.metaPillText}>{venue.activeUsers} inside</Text>
+          </View>
+          <View style={styles.metaPill}>
+            <Ionicons name="star" size={12} color="#ffd479" />
+            <Text style={styles.metaPillText}>{venue.rating.toFixed(1)}</Text>
+          </View>
         </View>
       </View>
+      <Ionicons name="chevron-forward" size={18} color="#6f789c" />
+    </TouchableOpacity>
+  );
 
-      <ScrollView
-        style={styles.scrollView}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4dabf7" />}
-      >
-        {activeCheckIn?.venueId ? (
-          <View style={styles.activeCheckInContainer}>
-            <View style={styles.activeCheckInContent}>
-              <Ionicons name="checkmark-circle" size={24} color="#4dabf7" />
-              <View style={styles.activeCheckInTextContainer}>
-                <Text style={styles.activeCheckInTitle}>You're checked in</Text>
-                <Text style={styles.activeCheckInVenue}>
-                  {venues.find((v) => v.id === activeCheckIn.venueId)?.name || "Unknown venue"}
-                </Text>
-              </View>
-            </View>
-            <Button
-              title="View"
-              variant="outline"
-              size="small"
-              onPress={() => navigation.navigate("VenueDetails", { venueId: activeCheckIn.venueId })}
-            />
-          </View>
-        ) : (
-          <View style={styles.scanContainer}>
-            <View style={styles.scanContent}>
-              <View style={styles.scanIconContainer}>
-                <Ionicons name="scan-outline" size={24} color="#fff" />
-              </View>
-              <View style={styles.scanTextContainer}>
-                <Text style={styles.scanTitle}>Check in to a venue</Text>
-                <Text style={styles.scanSubtitle}>Scan a QR code to connect with others</Text>
-              </View>
-            </View>
-            <Button title="Scan QR" icon="scan-outline" onPress={handleScanPress} />
-          </View>
-        )}
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Featured Venues</Text>
-            <TouchableOpacity style={styles.seeAllButton} onPress={() => navigation.navigate("Discover")}>
-              <Text style={styles.seeAllText}>See All</Text>
-              <Ionicons name="chevron-forward" size={16} color="#4dabf7" />
-            </TouchableOpacity>
-          </View>
-
-          <FlatList
-            data={featuredVenues}
-            renderItem={renderVenueItem}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.venueList}
-          />
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Nearby You</Text>
-            <TouchableOpacity style={styles.seeAllButton} onPress={() => navigation.navigate("Discover")}>
-              <Text style={styles.seeAllText}>See All</Text>
-              <Ionicons name="chevron-forward" size={16} color="#4dabf7" />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.venueGrid}>
-            {nearbyVenues.map((venue) => (
-              <VenueCard key={venue.id} venue={venue} onPress={handleVenuePress} style={styles.gridCard} />
-            ))}
-          </View>
-        </View>
-
-        {recentVenues.length > 0 && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Recently Visited</Text>
-            <FlatList
-              data={recentVenues}
-              renderItem={renderRecentVenueItem}
-              keyExtractor={(item) => item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.recentVenueList}
-            />
-          </View>
-        )}
-
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>12</Text>
-            <Text style={styles.statLabel}>Check-ins</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>8</Text>
-            <Text style={styles.statLabel}>Connections</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statValue}>4</Text>
-            <Text style={styles.statLabel}>Venues</Text>
-          </View>
-        </View>
-      </ScrollView>
-
-      {activeCheckIn && venues && (
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            <Ionicons name="location-outline" size={14} color="#4dabf7" />
-            {venues.find((v) => v.id === activeCheckIn.venueId)?.name || "Unknown venue"}
-            <Text style={styles.footerDot}> • </Text>
-            <Text>Expires in 1h 45m</Text>
-          </Text>
-        </View>
+  const SectionHeader = ({
+    title,
+    actionLabel,
+    onPress,
+  }: {
+    title: string;
+    actionLabel?: string;
+    onPress?: () => void;
+  }) => (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle}>{title}</Text>
+      {actionLabel && onPress && (
+        <TouchableOpacity style={styles.sectionAction} onPress={onPress}>
+          <Text style={styles.sectionActionText}>{actionLabel}</Text>
+          <Ionicons name="chevron-forward" size={16} color="#4dabf7" />
+        </TouchableOpacity>
       )}
     </View>
+  );
+
+  const EmptyState = ({ title, subtitle }: { title: string; subtitle: string }) => (
+    <View style={styles.emptyState}>
+      <Ionicons name="planet-outline" size={28} color="#6f7bbd" />
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptySubtitle}>{subtitle}</Text>
+      <Button title="Refresh" onPress={onRefresh} size="small" style={styles.emptyButton} />
+    </View>
+  );
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#4dabf7" />}
+        contentContainerStyle={styles.contentContainer}
+      >
+        <LinearGradient colors={["#151a3c", "#090c16"]} style={styles.hero}>
+          <View style={styles.heroTop}>
+            <View style={styles.heroLeft}>
+              <Text style={styles.kicker}>Tonight</Text>
+              <Text style={styles.heroTitle}>Hey {user?.firstName ?? "there"}, where's the vibe?</Text>
+              <TouchableOpacity style={styles.locationPill} onPress={() => navigation.navigate("Map")}>
+                <Ionicons name="location-outline" size={16} color="#9fb3ff" />
+                <Text style={styles.locationText}>{locationLabel}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.heroRight}>
+              <TouchableOpacity style={styles.creditsBadge} onPress={() => navigation.navigate("Credits")}>
+                <Ionicons name="flash" size={14} color="#ffd479" />
+                <Text style={styles.creditsText}>{credits}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.avatarButton} onPress={() => navigation.navigate("Profile")}>
+                {user?.avatar ? (
+                  <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+                ) : (
+                  <Ionicons name="person-circle-outline" size={40} color="#fff" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+          <View style={styles.heroBottom}>
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatLabel}>Unlocked venues</Text>
+              <Text style={styles.heroStatValue}>{activeCheckIn ? 1 : 0}</Text>
+            </View>
+            <View style={styles.heroDivider} />
+            <View style={styles.heroStat}>
+              <Text style={styles.heroStatLabel}>Live venues</Text>
+              <Text style={styles.heroStatValue}>{venues.length}</Text>
+            </View>
+          </View>
+        </LinearGradient>
+
+        <View style={styles.sectionSpacing}>
+          <View style={styles.checkInCard}>
+            <View style={styles.checkInText}>
+              <Text style={styles.checkInLabel}>{activeCheckIn ? "Currently inside" : "Not checked in"}</Text>
+              <Text style={styles.checkInTitle}>
+                {activeCheckIn ? currentVenue?.name ?? "Unknown venue" : "Scan a QR at the door"}
+              </Text>
+              <Text style={styles.checkInSubtitle}>
+                {activeCheckIn ? "Guest list unlocked for 2 hours." : "Unlock guest lists and live rooms instantly."}
+              </Text>
+            </View>
+            <Button
+              title={activeCheckIn ? "View venue" : "Scan QR"}
+              size="small"
+              onPress={
+                activeCheckIn
+                  ? () => navigation.navigate("VenueDetails", { venueId: activeCheckIn.venueId })
+                  : () => navigation.navigate("Scan")
+              }
+            />
+          </View>
+        </View>
+
+        <StoryRail />
+
+        <View style={styles.actionsRow}>
+          {quickActions.map((action) => (
+            <TouchableOpacity
+              key={action.title}
+              style={[styles.actionCard, { backgroundColor: action.tint }]}
+              onPress={action.onPress}
+            >
+              <View style={styles.actionIcon}>
+                <Ionicons name={action.icon as keyof typeof Ionicons.glyphMap} size={18} color="#fff" />
+              </View>
+              <Text style={styles.actionTitle}>{action.title}</Text>
+              <Text style={styles.actionSubtitle}>{action.subtitle}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <CreditBanner
+          credits={credits}
+          onAddCredits={() => navigation.navigate("Credits")}
+          onViewHistory={() => navigation.navigate("Credits")}
+        />
+
+        <TouchableOpacity style={styles.inviteBanner} onPress={async () => {
+          const invite = await createInvite();
+          if (invite) {
+            track("navigation", { screen: "Home", action: "invite_created" });
+          }
+        }}>
+          <View style={styles.inviteLeft}>
+            <Text style={styles.inviteTitle}>Invite friends</Text>
+            <Text style={styles.inviteSubtitle}>
+              +{inviterReward} for you • +{inviteeReward} for them
+            </Text>
+          </View>
+          <View style={styles.invitePill}>
+            <Ionicons name="gift" size={16} color="#0a0e17" />
+          </View>
+        </TouchableOpacity>
+
+        <View style={styles.sectionSpacing}>
+          <SectionHeader
+            title="Tonight's headliners"
+            actionLabel="See all"
+            onPress={() => navigation.navigate("Discover")}
+          />
+          {featuredVenues.length === 0 ? (
+            <EmptyState title="No featured spots yet" subtitle="Refresh to load the latest venues." />
+          ) : (
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={featuredVenues}
+              keyExtractor={(item) => item.id}
+              renderItem={renderFeaturedVenue}
+              contentContainerStyle={styles.featuredList}
+            />
+          )}
+        </View>
+
+        <View style={styles.sectionSpacing}>
+          <SectionHeader title="Close to you" actionLabel="Map" onPress={() => navigation.navigate("Map")} />
+          {nearbyVenues.length === 0 ? (
+            <EmptyState title="Nothing nearby yet" subtitle="Give it a second, we are warming up." />
+          ) : (
+            <View style={styles.grid}>
+              {nearbyVenues.map((venue) => (
+                <View key={venue.id} style={styles.gridItem}>
+                  <VenueCard venue={venue} onPress={handleVenuePress} compact />
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.sectionSpacing}>
+          <SectionHeader title="Trending right now" actionLabel="Discover" onPress={() => navigation.navigate("Discover")} />
+          {trendingVenues.length === 0 ? (
+            <EmptyState title="No trending spots" subtitle="Scan a venue to seed your feed." />
+          ) : (
+            trendingVenues.map(renderRecentVenue)
+          )}
+        </View>
+
+        <View style={styles.sectionSpacing}>
+          <SectionHeader title="Recently buzzing" />
+          {recentVenues.length === 0 ? (
+            <EmptyState title="No recent activity" subtitle="Scan a venue to start populating this feed." />
+          ) : (
+            recentVenues.map(renderRecentVenue)
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: "#0a0e17",
+    backgroundColor: "#05060f",
   },
-  header: {
+  inviteBanner: {
+    marginHorizontal: 20,
+    marginTop: 18,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: "rgba(92,225,255,0.12)",
+    borderWidth: 1,
+    borderColor: "rgba(92,225,255,0.3)",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  inviteLeft: {
+    gap: 4,
+  },
+  inviteTitle: {
+    color: "#fff",
+    fontWeight: "700",
+    fontSize: 15,
+  },
+  inviteSubtitle: {
+    color: "#b7c0e6",
+    fontSize: 12,
+  },
+  invitePill: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#5ce1ff",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  contentContainer: {
+    paddingBottom: 40,
+  },
+  hero: {
+    marginHorizontal: 20,
+    borderRadius: 28,
+    padding: 22,
+    marginTop: 4,
+    gap: 18,
+  },
+  heroTop: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 15,
+    gap: 16,
   },
-  greeting: {
-    color: "#aaa",
-    fontSize: 14,
+  heroLeft: {
+    flex: 1,
+    gap: 8,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: "700",
+  heroRight: {
+    alignItems: "flex-end",
+    gap: 10,
+  },
+  kicker: {
+    color: "#8f98c9",
+    letterSpacing: 1.2,
+    fontSize: 12,
+    textTransform: "uppercase",
+    fontWeight: "600",
+  },
+  heroTitle: {
     color: "#fff",
-    marginTop: 4,
+    fontSize: 24,
+    fontWeight: "700",
+    lineHeight: 30,
   },
-  headerRight: {
+  locationPill: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  creditsButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#1a1f2c",
-    borderRadius: 16,
-    paddingVertical: 6,
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.1)",
+    borderRadius: 999,
     paddingHorizontal: 12,
-    marginRight: 12,
+    paddingVertical: 6,
+    gap: 6,
+  },
+  locationText: {
+    color: "#dfe6ff",
+    fontSize: 13,
+    fontWeight: "500",
+  },
+  creditsBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
   },
   creditsText: {
     color: "#fff",
-    fontSize: 14,
     fontWeight: "600",
-    marginLeft: 4,
   },
-  profileButton: {
-    width: 40,
-    height: 40,
+  avatarButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.2)",
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 20,
-    overflow: "hidden",
   },
-  profileImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  avatarImage: {
+    width: "100%",
+    height: "100%",
   },
-  scrollView: {
+  heroBottom: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  heroStat: {
     flex: 1,
   },
-  activeCheckInContainer: {
-    backgroundColor: "#333",
-    padding: 16,
-    borderRadius: 12,
-    margin: 20,
+  heroStatLabel: {
+    color: "#8f98c9",
+    fontSize: 12,
   },
-  activeCheckInContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  activeCheckInTextContainer: {
-    marginLeft: 16,
-  },
-  activeCheckInTitle: {
+  heroStatValue: {
     color: "#fff",
-    fontWeight: "600",
+    fontSize: 24,
+    fontWeight: "700",
+    marginTop: 4,
   },
-  activeCheckInVenue: {
-    color: "#aaa",
+  heroDivider: {
+    width: 1,
+    height: 38,
+    backgroundColor: "rgba(255,255,255,0.1)",
+    marginHorizontal: 16,
   },
-  scanContainer: {
-    backgroundColor: "#4dabf7",
-    padding: 16,
-    borderRadius: 12,
-    margin: 20,
+  sectionSpacing: {
+    marginTop: 24,
+    paddingHorizontal: 20,
   },
-  scanContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  scanIconContainer: {
-    backgroundColor: "#007acc",
+  checkInCard: {
+    backgroundColor: "#0f1324",
     borderRadius: 20,
-    padding: 12,
+    padding: 20,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 18,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.04)",
   },
-  scanTextContainer: {
-    marginLeft: 16,
+  checkInText: {
+    flex: 1,
+    gap: 4,
   },
-  scanTitle: {
+  checkInLabel: {
+    color: "#8f98c9",
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 1.2,
+  },
+  checkInTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  checkInSubtitle: {
+    color: "#b4bad6",
+    fontSize: 13,
+    lineHeight: 20,
+  },
+  actionsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+    marginTop: 16,
+    paddingHorizontal: 20,
+  },
+  actionCard: {
+    flexBasis: "47%",
+    borderRadius: 18,
+    padding: 16,
+    gap: 8,
+  },
+  actionIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  actionTitle: {
+    color: "#fff",
     fontWeight: "600",
-    color: "#fff",
+    fontSize: 14,
   },
-  scanSubtitle: {
-    color: "#fff",
-  },
-  section: {
-    marginTop: 20,
-    marginHorizontal: 20,
+  actionSubtitle: {
+    color: "#d0d6f0",
+    fontSize: 12,
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 16,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "700",
     color: "#fff",
+    fontSize: 20,
+    fontWeight: "700",
   },
-  seeAllButton: {
+  sectionAction: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 4,
   },
-  seeAllText: {
+  sectionActionText: {
     color: "#4dabf7",
-    fontWeight: "500",
+    fontWeight: "600",
   },
-  venueList: {
-    marginTop: 16,
+  featuredList: {
+    paddingRight: 20,
+    gap: 16,
   },
-  venueGrid: {
+  featuredCard: {
+    marginRight: 16,
+  },
+  grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    marginTop: 16,
+    gap: 12,
   },
-  gridCard: {
+  gridItem: {
     width: "48%",
-    marginBottom: 16,
   },
-  recentVenueList: {
-    marginTop: 16,
-  },
-  statsContainer: {
+  listItem: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 20,
-    marginHorizontal: 20,
-  },
-  statCard: {
     alignItems: "center",
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: "rgba(255,255,255,0.05)",
+    gap: 12,
+  },
+  listItemImage: {
+    width: 56,
+    height: 56,
+    borderRadius: 12,
+  },
+  listItemContent: {
     flex: 1,
+    gap: 2,
   },
-  statValue: {
-    fontSize: 18,
+  listItemTitle: {
+    color: "#fff",
     fontWeight: "600",
+    fontSize: 15,
+  },
+  listItemSubtitle: {
+    color: "#8f98c9",
+    fontSize: 12,
+  },
+  listItemMeta: {
+    flexDirection: "row",
+    gap: 6,
+    marginTop: 6,
+  },
+  metaPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  metaPillText: {
     color: "#fff",
+    fontSize: 11,
   },
-  statLabel: {
-    color: "#aaa",
+  emptyState: {
+    alignItems: "center",
+    paddingVertical: 24,
+    gap: 6,
   },
-  footer: {
-    padding: 16,
-    backgroundColor: "#222",
-  },
-  footerText: {
+  emptyTitle: {
     color: "#fff",
-    fontSize: 14,
+    fontWeight: "600",
+  },
+  emptySubtitle: {
+    color: "#8590c7",
+    fontSize: 13,
     textAlign: "center",
   },
-  footerDot: {
-    color: "#aaa",
+  emptyButton: {
+    marginTop: 6,
   },
 });
 

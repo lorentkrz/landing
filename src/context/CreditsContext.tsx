@@ -1,98 +1,128 @@
-"use client"
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import type { CreditTransaction } from "../types";
+import { supabase } from "../lib/supabase";
+import { useAuth } from "./AuthContext";
 
-import { createContext, useContext, useState, useEffect } from "react"
-
-// Define the CreditsContext type
 type CreditsContextType = {
-  credits: number
-  isLoading: boolean
-  addCredits: (amount: number) => Promise<void>
-  useCredits: (amount: number) => Promise<boolean>
+  credits: number;
+  transactions: CreditTransaction[];
+  isLoading: boolean;
+  addCredits: (amount: number, price?: number, description?: string) => Promise<void>;
+  spendCredits: (amount: number, description?: string) => Promise<boolean>;
+};
+
+interface CreditsProviderProps {
+  children: ReactNode;
 }
 
-// Create the CreditsContext
-const CreditsContext = createContext<CreditsContextType | undefined>(undefined)
+const CreditsContext = createContext<CreditsContextType | undefined>(undefined);
 
-// Create the CreditsProvider component
-export const CreditsProvider = ({ children }) => {
-  const [credits, setCredits] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
+export const CreditsProvider = ({ children }: CreditsProviderProps) => {
+  const { user } = useAuth();
+  const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const credits = useMemo(
+    () => transactions.reduce((sum, tx) => sum + tx.amount, 0),
+    [transactions],
+  );
 
   useEffect(() => {
-    // Load initial credits
-    loadCredits()
-  }, [])
-
-  const loadCredits = async () => {
-    setIsLoading(true)
-    try {
-      // In a real app, you would fetch credits from your API
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      // Mock credits data
-      setCredits(100)
-    } catch (error) {
-      console.error("Failed to load credits:", error)
-    } finally {
-      setIsLoading(false)
+    if (user?.id) {
+      loadTransactions(user.id);
+    } else {
+      setTransactions([]);
+      setIsLoading(false);
     }
-  }
+  }, [user?.id]);
 
-  const addCredits = async (amount: number) => {
-    setIsLoading(true)
+  const loadTransactions = async (userId: string) => {
+    setIsLoading(true);
     try {
-      // In a real app, you would call your API to add credits
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      setCredits((prevCredits) => prevCredits + amount)
-      return
+      const { data, error } = await supabase
+        .from("credit_transactions")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      const mapped =
+        data?.map((tx) => ({
+          id: tx.id,
+          userId: tx.user_id,
+          amount: tx.amount,
+          price: Number(tx.price ?? 0),
+          description: tx.description ?? undefined,
+          type: tx.type,
+          date: tx.created_at,
+        })) ?? [];
+      setTransactions(mapped);
     } catch (error) {
-      console.error("Failed to add credits:", error)
-      throw new Error("Failed to add credits. Please try again.")
+      console.error("Failed to load credit history:", error);
+      setTransactions([]);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
-  const useCredits = async (amount: number): Promise<boolean> => {
+  const addCredits = async (amount: number, price = 0, description = "Credit purchase") => {
+    if (!user?.id) {
+      throw new Error("You must be logged in.");
+    }
+    const { error } = await supabase.from("credit_transactions").insert({
+      user_id: user.id,
+      amount,
+      price,
+      description,
+      type: "purchase",
+    });
+    if (error) {
+      console.error("Failed to add credits:", error);
+      throw new Error("Failed to add credits. Please try again.");
+    }
+    await loadTransactions(user.id);
+  };
+
+  const spendCredits = async (amount: number, description = "Chat extension") => {
+    if (!user?.id) {
+      return false;
+    }
     if (credits < amount) {
-      return false
+      return false;
     }
-
-    setIsLoading(true)
-    try {
-      // In a real app, you would call your API to use credits
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      setCredits((prevCredits) => prevCredits - amount)
-      return true
-    } catch (error) {
-      console.error("Failed to use credits:", error)
-      throw new Error("Failed to use credits. Please try again.")
-    } finally {
-      setIsLoading(false)
+    const { error } = await supabase.from("credit_transactions").insert({
+      user_id: user.id,
+      amount: -amount,
+      price: 0,
+      description,
+      type: "debit",
+    });
+    if (error) {
+      console.error("Failed to spend credits:", error);
+      throw new Error("Failed to spend credits. Please try again.");
     }
-  }
+    await loadTransactions(user.id);
+    return true;
+  };
 
   return (
     <CreditsContext.Provider
       value={{
         credits,
+        transactions,
         isLoading,
         addCredits,
-        useCredits,
+        spendCredits,
       }}
     >
       {children}
     </CreditsContext.Provider>
-  )
-}
+  );
+};
 
-// Create a hook to use the CreditsContext
 export const useCredits = () => {
-  const context = useContext(CreditsContext)
-  if (context === undefined) {
-    throw new Error("useCredits must be used within a CreditsProvider")
+  const context = useContext(CreditsContext);
+  if (!context) {
+    throw new Error("useCredits must be used within a CreditsProvider");
   }
-  return context
-}
+  return context;
+};

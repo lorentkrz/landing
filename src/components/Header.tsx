@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, StatusBar } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useNavigation } from '@react-navigation/native';
+import { useAppNavigation } from '../navigation/useAppNavigation';
 
 interface HeaderProps {
   title: string;
@@ -18,7 +18,7 @@ const Header: React.FC<HeaderProps> = ({
   onRightIconPress,
   transparent = false,
 }) => {
-  const navigation = useNavigation();
+  const navigation = useAppNavigation();
 
   return (
     <View style={[
