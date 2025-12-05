@@ -32,6 +32,7 @@ import { useVenues } from "../context/VenueContext";
 import { useAppNavigation } from "../navigation/useAppNavigation";
 import type { Venue } from "../types";
 import { track } from "../utils/analytics";
+import { computeRegion, type MapRegion } from "../utils/map";
 type MapRegion = {
   latitude: number;
   longitude: number;
@@ -58,30 +59,6 @@ const CAROUSEL_SIDE_PADDING = (WINDOW.width - CARD_WIDTH) / 2;
 
 const clampValue = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), max);
-
-const computeRegion = (venues: Venue[]): MapRegion => {
-  if (!venues.length) {
-    return {
-      latitude: 42.6629,
-      longitude: 21.1655,
-      latitudeDelta: 1.2,
-      longitudeDelta: 1.2,
-    };
-  }
-
-  const latitudes = venues.map((v) => v.latitude ?? 0);
-  const longitudes = venues.map((v) => v.longitude ?? 0);
-
-  const avgLat = latitudes.reduce((a, b) => a + b, 0) / latitudes.length;
-  const avgLng = longitudes.reduce((a, b) => a + b, 0) / longitudes.length;
-
-  return {
-    latitude: avgLat,
-    longitude: avgLng,
-    latitudeDelta: 0.5,
-    longitudeDelta: 0.5,
-  };
-};
 
 const MapScreen = () => {
   const cameraRef = useRef<React.ComponentRef<typeof Camera> | null>(null);
@@ -293,6 +270,17 @@ const MapScreen = () => {
 
   const handleOpenList = () => setListModalVisible(true);
   const handleCloseList = () => setListModalVisible(false);
+  const recenterSelected = () => {
+    if (selectedVenue) {
+      moveToVenue(selectedVenue);
+      return;
+    }
+    if (userLocation) {
+      flyToLocation([userLocation.longitude, userLocation.latitude]);
+      return;
+    }
+    moveToVenue(defaultRegion, true);
+  };
 
   const computeVenueMeta = useCallback((item: Venue) => {
     const openLabel = getOpenLabel(item.openHours);
@@ -366,9 +354,23 @@ const MapScreen = () => {
 
   useEffect(() => {
     if (hasCenteredOnVenues.current) return;
-    if (!filteredVenues.length || !cameraRef.current || userLocation) return;
-    hasCenteredOnVenues.current = true;
-    cameraRef.current.flyTo([defaultRegion.longitude, defaultRegion.latitude], 600);
+    if (!filteredVenues.length || userLocation) return;
+    const center = () => {
+      if (hasCenteredOnVenues.current) return;
+      const camera = cameraRef.current;
+      if (!camera) return;
+      hasCenteredOnVenues.current = true;
+      camera.flyTo([defaultRegion.longitude, defaultRegion.latitude], 600);
+      camera.setCamera?.({
+        centerCoordinate: [defaultRegion.longitude, defaultRegion.latitude],
+        zoomLevel: 12,
+        animationMode: "flyTo",
+        animationDuration: 600,
+      });
+    };
+    // Try immediately, then once more shortly after to catch late camera mounts.
+    center();
+    setTimeout(center, 250);
   }, [defaultRegion.longitude, defaultRegion.latitude, filteredVenues.length, userLocation]);
 
   useFocusEffect(
@@ -456,6 +458,7 @@ const MapScreen = () => {
           scrollEnabled={true}
           zoomEnabled={true}
           pitchEnabled={true}
+          onDidFailLoadingMap={() => setMapError("Map failed to load. Check your connection.")}
         >
           <MapLibreGL.Camera
             ref={(ref) => {
@@ -545,6 +548,14 @@ const MapScreen = () => {
         >
           <Ionicons name="list" size={20} color="#fff" />
         </TouchableOpacity>
+
+        {/* Recenter Button */}
+        <TouchableOpacity
+          style={styles.recenterButton}
+          onPress={recenterSelected}
+        >
+          <Ionicons name="compass" size={20} color="#fff" />
+        </TouchableOpacity>
         
         {/* Map Error Toast */}
         {mapError && (
@@ -559,6 +570,9 @@ const MapScreen = () => {
           <View style={styles.errorToast}>
             <Ionicons name="warning" size={16} color="#fff" />
             <Text style={styles.errorText}>{locationError}</Text>
+            <TouchableOpacity onPress={getUserLocation}>
+              <Text style={styles.errorRetry}>Retry</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -1083,10 +1097,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     flex: 1,
   },
+  errorRetry: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
   locationButton: {
     position: "absolute",
     bottom: 24,
     right: 76,
+    backgroundColor: "rgba(3,5,15,0.85)",
+    borderRadius: 50,
+    width: 50,
+    height: 50,
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  recenterButton: {
+    position: "absolute",
+    bottom: 84,
+    right: 16,
     backgroundColor: "rgba(3,5,15,0.85)",
     borderRadius: 50,
     width: 50,

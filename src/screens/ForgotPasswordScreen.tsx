@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../lib/supabase";
 import { useAppNavigation } from "../navigation/useAppNavigation";
 import Button from "../components/Button";
+import * as Linking from "expo-linking";
 
 const ForgotPasswordScreen = () => {
   const navigation = useAppNavigation();
@@ -38,12 +39,12 @@ const ForgotPasswordScreen = () => {
     try {
       setStatus("sending");
       setError(null);
-      await supabase.auth.resetPasswordForEmail(trimmedEmail);
+      await supabase.auth.resetPasswordForEmail(trimmedEmail, {
+        redirectTo: Linking.createURL("/reset-password"),
+      });
       setStatus("sent");
-      Alert.alert(
-        "Check your inbox",
-        "We sent reset instructions to your email. Follow the link to create a new password.",
-      );
+      navigation.navigate("ResetPassword", { email: trimmedEmail });
+      Alert.alert("Check your inbox", "Enter the code we sent to your email to reset your password.");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unable to send reset instructions right now.";
       setError(message);

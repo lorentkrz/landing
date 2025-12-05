@@ -51,7 +51,7 @@ const AboutScreen = () => {
           </Text>
         </View>
 
-                <View style={styles.section}>
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>What we stand for</Text>
           <View style={styles.metricsRow}>
             <View style={styles.metricCard}>
@@ -67,8 +67,6 @@ const AboutScreen = () => {
               <Text style={styles.metricLabel}>Connections</Text>
             </View>
           </View>
-        </View>
-
         </View>
 
         <View style={styles.card}>

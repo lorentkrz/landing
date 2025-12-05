@@ -250,7 +250,30 @@ const ProfileScreen = () => {
       {
         text: "Delete",
         style: "destructive",
-        onPress: () => Alert.alert("Account Deletion", "We'll process your request within 24 hours."),
+        onPress: async () => {
+          if (!user?.id) return;
+          try {
+            const { error } = await supabase.rpc("delete_user_data", { user_id: user.id });
+            if (error) {
+              Alert.alert("Delete failed", error.message);
+              return;
+            }
+            await supabase.auth.signOut();
+            Alert.alert("Account deleted", "Your account has been removed.", [
+              {
+                text: "OK",
+                onPress: () =>
+                  navigation.reset({
+                    index: 0,
+                    routes: [{ name: "Login" as never }],
+                  }),
+              },
+            ]);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Unable to delete account right now.";
+            Alert.alert("Delete failed", message);
+          }
+        },
       },
     ]);
   };
@@ -323,9 +346,7 @@ const ProfileScreen = () => {
         <View style={styles.sectionHeader}>
           <View>
             <Text style={styles.sectionTitle}>Invite friends</Text>
-            <Text style={styles.sectionSubtitle}>
-              +{inviterReward} credits for you • +{inviteeReward} for them
-            </Text>
+            <Text style={styles.sectionSubtitle}>+{inviterReward} credits for you • +{inviteeReward} for them</Text>
           </View>
           <TouchableOpacity onPress={handleInviteFriend} style={styles.inviteButton}>
             <Ionicons name="gift" size={18} color="#0a0e17" />
@@ -338,7 +359,7 @@ const ProfileScreen = () => {
           <Text style={styles.sectionBody}>Share your link and earn free credits when friends join.</Text>
         ) : (
           <View style={{ marginTop: 14 }}>
-            {[referrals[0]].map((referral) => (
+            {referrals.slice(0, 3).map((referral) => (
               <View key={referral.id} style={styles.referralRow}>
                 <View>
                   <Text style={styles.referralCode}>{referral.code}</Text>
@@ -450,31 +471,32 @@ const ProfileScreen = () => {
             <Ionicons name="mail-outline" size={20} color="#fff" />
             <Text style={styles.supportText}>Contact support</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.supportRow} onPress={() => Linking.openURL("https://nata.app/terms")}>
+            <Ionicons name="document-text-outline" size={20} color="#fff" />
+            <Text style={styles.supportText}>Terms of Service</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.supportRow} onPress={() => Linking.openURL("https://nata.app/privacy")}>
+            <Ionicons name="shield-checkmark-outline" size={20} color="#fff" />
+            <Text style={styles.supportText}>Privacy Policy</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Account</Text>
-          <Button
-            title="Manage credits"
-            onPress={() => navigation.navigate("Credits")}
-            variant="ghost"
-            style={styles.accountButton}
-            textStyle={styles.accountButtonText}
-          />
-          <Button
-            title="Delete account"
-            onPress={handleDeleteAccount}
-            variant="ghost"
-            style={[styles.accountButton, styles.accountDanger]}
-            textStyle={[styles.accountButtonText, styles.accountDangerText]}
-          />
-          <Button
-            title="Logout"
-            onPress={handleLogout}
-            variant="ghost"
-            style={[styles.accountButton, styles.accountDanger]}
-            textStyle={[styles.accountButtonText, styles.accountDangerText]}
-          />
+          <View style={styles.accountActionsRow}>
+            <TouchableOpacity style={styles.accountPill} onPress={() => navigation.navigate("Credits")}>
+              <Ionicons name="card" size={16} color="#0a0e17" />
+              <Text style={styles.accountPillText}>Manage credits</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.accountPill} onPress={handleLogout}>
+              <Ionicons name="log-out" size={16} color="#0a0e17" />
+              <Text style={styles.accountPillText}>Logout</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={[styles.accountPill, styles.accountDanger]} onPress={handleDeleteAccount}>
+            <Ionicons name="trash" size={16} color="#ff7676" />
+            <Text style={[styles.accountPillText, styles.accountDangerText]}>Delete account</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -489,15 +511,15 @@ const styles = StyleSheet.create({
   heroCard: {
     marginHorizontal: 20,
     marginTop: 12,
-    padding: 18,
+    padding: 15,
     borderRadius: 20,
     backgroundColor: "#0e1327",
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.05)",
     shadowColor: "#000",
     shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 10 },
-    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 14,
   },
   heroTopRow: {
     flexDirection: "row",
@@ -522,15 +544,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 82,
+    height: 82,
+    borderRadius: 41,
   },
   name: {
     color: "#fff",
     fontSize: 22,
     fontWeight: "700",
-    marginTop: 14,
+    marginTop: 10,
   },
   meta: {
     color: "#8b92c5",
@@ -580,7 +602,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   section: {
-    marginTop: 24,
+    marginTop: 20,
     paddingHorizontal: 20,
   },
   sectionHeader: {
@@ -742,19 +764,30 @@ const styles = StyleSheet.create({
     marginTop: 16,
     borderColor: "#ff7676",
   },
-  accountButton: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.08)",
-    backgroundColor: "#0e1327",
+  accountActionsRow: {
+    flexDirection: "row",
+    gap: 10,
     marginTop: 10,
   },
-  accountButtonText: {
-    color: "#fff",
+  accountPill: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 12,
+    backgroundColor: "#4dabf7",
+  },
+  accountPillText: {
+    color: "#0a0e17",
     fontWeight: "700",
   },
   accountDanger: {
+    marginTop: 12,
+    backgroundColor: "rgba(255,118,118,0.12)",
+    borderWidth: 1,
     borderColor: "rgba(255,118,118,0.4)",
-    backgroundColor: "rgba(255,118,118,0.08)",
   },
   accountDangerText: {
     color: "#ff7676",

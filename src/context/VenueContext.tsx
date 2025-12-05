@@ -13,7 +13,7 @@ type VenueContextType = {
   activeCheckIn: CheckIn | null;
   refreshVenues: () => Promise<void>;
   getVenueById: (id: string) => Venue | undefined;
-  checkInToVenue: (venueId: string) => Promise<void>;
+  checkInToVenue: (venueId: string, coords?: { latitude: number; longitude: number }, opts?: { overrideProximity?: boolean }) => Promise<void>;
   fetchActiveUsersForVenue: (venueId: string) => Promise<User[]>;
   updateUserLocation: (coords: { latitude: number; longitude: number }) => void;
 };
@@ -264,10 +264,31 @@ export const VenueProvider = ({ children }: VenueProviderProps) => {
 
   const getVenueById = (id: string) => venues.find((venue) => venue.id === id);
 
-  const checkInToVenue = async (venueId: string) => {
+  const checkInToVenue = async (
+    venueId: string,
+    coords?: { latitude: number; longitude: number },
+    opts?: { overrideProximity?: boolean },
+  ) => {
     if (!user?.id) {
       throw new Error("You must be logged in to check in.");
     }
+    const venue = getVenueById(venueId);
+    if (!venue?.latitude || !venue?.longitude) {
+      throw new Error("This venue is missing location data. Try another venue.");
+    }
+    const currentCoords = coords ?? userLocation;
+    let distanceKm = currentCoords
+      ? haversineKm(currentCoords.latitude, currentCoords.longitude, venue.latitude, venue.longitude)
+      : undefined;
+    if (!opts?.overrideProximity) {
+      if (!currentCoords) {
+        throw new Error("Turn on location to check in. We need your position to verify proximity.");
+      }
+      if (distanceKm === undefined || distanceKm * 1000 > 50) {
+        throw new Error("You need to be at the venue to check in (within 50 meters).");
+      }
+    }
+    if (distanceKm === undefined) distanceKm = 0;
     setIsLoading(true);
     try {
       await supabase.from("check_ins").delete().eq("user_id", user.id);
@@ -283,7 +304,7 @@ export const VenueProvider = ({ children }: VenueProviderProps) => {
         throw error;
       }
 
-      track("check_in", { venueId });
+      track("check_in", { venueId, distance_m: Math.round((distanceKm ?? 0) * 1000), override: opts?.overrideProximity ?? false });
       await fetchActiveCheckIn(user.id);
       await refreshVenues();
     } catch (error) {

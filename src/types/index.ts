@@ -121,11 +121,18 @@ export interface Story {
   userAvatar?: string;
   mediaUrl: string;
   thumbnailUrl?: string;
+  mediaType?: "image" | "video";
+  durationMs?: number;
   venueId?: string;
   createdAt: string;
   expiresAt: string;
   views?: number;
   isOwn?: boolean;
+  seenAt?: string;
+  status?: "live" | "expired" | "failed";
+  deepLink?: string;
+  retryCount?: number;
+  errorReason?: string;
 }
 
 // Check-in related types
@@ -171,6 +178,7 @@ export type RootStackParamList = {
   UserProfile: { userId: string };
   HowToCheckIn: undefined;
   AuthCallback: undefined;
+  ResetPassword: { email?: string };
 };
 
 // Form related types

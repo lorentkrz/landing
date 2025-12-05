@@ -19,6 +19,7 @@ import OnboardingScreen from "./src/screens/OnboardingScreen";
 import RegisterScreen from "./src/screens/RegisterScreen";
 import LoginScreen from "./src/screens/LoginScreen";
 import ForgotPasswordScreen from "./src/screens/ForgotPasswordScreen";
+import PasswordUpdateScreen from "./src/screens/PasswordUpdateScreen";
 import AuthCallbackScreen from "./src/screens/AuthCallbackScreen";
 import ChatScreen from "./src/screens/ChatScreen";
 import VerifyEmailScreen from "./src/screens/VerifyEmailScreen";
@@ -128,13 +129,18 @@ const AppNavigator = () => {
     config: {
       screens: {
         AuthCallback: "auth-callback",
+        ResetPassword: "reset-password",
       },
     },
   };
 
   return (
     <NavigationContainer linking={linking}>
-      <Stack.Navigator id={undefined} screenOptions={{ headerShown: false }}>
+      <Stack.Navigator
+        id={undefined}
+        screenOptions={{ headerShown: false }}
+        initialRouteName={isAuthenticated ? "MainTabs" : "Login"}
+      >
         {isAuthenticated ? (
           <>
             <Stack.Screen name="MainTabs" component={TabNavigator} />
@@ -160,6 +166,7 @@ const AppNavigator = () => {
             <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+            <Stack.Screen name="ResetPassword" component={PasswordUpdateScreen} />
             <Stack.Screen name="AuthCallback" component={AuthCallbackScreen} />
           </>
         )}

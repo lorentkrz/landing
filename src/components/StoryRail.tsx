@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Dimensions, FlatList, Image, Modal, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { useEffect, useMemo, useState } from "react";
+import { Dimensions, FlatList, Modal, StyleSheet, Text, TouchableOpacity, View, Pressable, Alert, Image } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { useStories } from "../context/StoriesContext";
@@ -8,6 +8,7 @@ import { track } from "../utils/analytics";
 import { useAppNavigation } from "../navigation/useAppNavigation";
 import { ensureConversation } from "../utils/conversations";
 import { useAuth } from "../context/AuthContext";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Props = {
   onPressStory?: () => void;
@@ -19,6 +20,9 @@ const StoryRail = ({ onPressStory }: Props) => {
   const { stories, postStory, markViewed, deleteStory } = useStories();
   const [activeStoryId, setActiveStoryId] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState<number>(0);
+  const [progress, setProgress] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+  const insets = useSafeAreaInsets();
 
   const activeStory = useMemo(() => stories.find((s) => s.id === activeStoryId), [stories, activeStoryId]);
   type StoryItem = { id: string; label: string; isAdd?: boolean; avatar?: string; mediaUrl?: string; isOwn?: boolean };
@@ -65,6 +69,23 @@ const StoryRail = ({ onPressStory }: Props) => {
     }
   };
 
+  useEffect(() => {
+    if (!activeStory || isPaused) return;
+    const fallbackDuration = 8000;
+    const duration = activeStory.durationMs ?? fallbackDuration;
+    setProgress(0);
+    const startedAt = Date.now();
+    const tick = setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const pct = Math.min(elapsed / duration, 1);
+      setProgress(pct);
+      if (pct >= 1) {
+        goNext();
+      }
+    }, 50);
+    return () => clearInterval(tick);
+  }, [activeStory, activeIndex, isPaused]);
+
   return (
     <View style={styles.container}>
       <FlatList
@@ -73,9 +94,47 @@ const StoryRail = ({ onPressStory }: Props) => {
         keyExtractor={(item) => item.id}
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.listContent}
+        ListEmptyComponent={
+          <TouchableOpacity
+            style={[styles.bubble, styles.addBubble]}
+            onPress={() => {
+              if (!user) {
+                Alert.alert("Login required", "Sign in to post a story.");
+                return;
+              }
+              const fullName = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim();
+              if (!fullName) {
+                Alert.alert("Profile incomplete", "Add your name before posting a story.");
+                return;
+              }
+              postStory(fullName, user.avatar);
+            }}
+            activeOpacity={0.85}
+          >
+            <View style={styles.addIcon}>
+              <Ionicons name="add" size={18} color={palette.background} />
+            </View>
+            <Text style={styles.label}>Add first story</Text>
+          </TouchableOpacity>
+        }
         renderItem={({ item }) =>
           item.isAdd ? (
-            <TouchableOpacity style={[styles.bubble, styles.addBubble]} onPress={postStory} activeOpacity={0.85}>
+            <TouchableOpacity
+              style={[styles.bubble, styles.addBubble]}
+              onPress={() => {
+                if (!user) {
+                  Alert.alert("Login required", "Sign in to post a story.");
+                  return;
+                }
+                const fullName = `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim();
+                if (!fullName) {
+                  Alert.alert("Profile incomplete", "Add your name before posting a story.");
+                  return;
+                }
+                postStory(fullName, user.avatar);
+              }}
+              activeOpacity={0.85}
+            >
               <View style={styles.addIcon}>
                 <Ionicons name="add" size={18} color={palette.background} />
               </View>
@@ -89,6 +148,7 @@ const StoryRail = ({ onPressStory }: Props) => {
                     uri: item.avatar ?? "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=200&h=200&fit=crop",
                   }}
                   style={styles.avatar}
+                  resizeMode="cover"
                 />
               </View>
               <Text style={styles.label} numberOfLines={1}>
@@ -103,26 +163,91 @@ const StoryRail = ({ onPressStory }: Props) => {
         {activeStory ? (
           <View style={styles.viewerBackdrop}>
             <Image source={{ uri: activeStory.mediaUrl }} style={styles.viewerFullscreenImage} resizeMode="cover" />
-          <LinearGradient colors={["rgba(0,0,0,0.7)", "transparent"]} style={styles.viewerTopOverlay} />
-          <LinearGradient colors={["transparent", "rgba(0,0,0,0.8)"]} style={styles.viewerBottomOverlay} />
-          <TouchableOpacity style={styles.viewerClose} onPress={() => setActiveStoryId(null)}>
-            <Ionicons name="close" size={26} color="#fff" />
-          </TouchableOpacity>
-          {activeIndex > 0 && (
-            <TouchableOpacity style={[styles.viewerNav, { left: 16 }]} onPress={goPrev}>
-              <Ionicons name="chevron-back" size={26} color="#fff" />
-            </TouchableOpacity>
-          )}
-          {activeIndex < stories.length - 1 && (
-            <TouchableOpacity style={[styles.viewerNav, { right: 16 }]} onPress={goNext}>
-              <Ionicons name="chevron-forward" size={26} color="#fff" />
-            </TouchableOpacity>
-          )}
-          <View style={styles.viewerHeader}>
-            <View>
-              <Text style={styles.viewerCred}>@{activeStory.userId.slice(0, 8)}</Text>
-              <Text style={styles.viewerMeta}>
-                Expires {new Date(activeStory.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            <View style={[styles.viewerProgressTrack, { top: 16 + insets.top }]}>
+              <View style={[styles.viewerProgressFill, { width: `${Math.round(progress * 100)}%` }]} />
+            </View>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPressOut={() => setIsPaused(false)}
+              onLongPress={() => setIsPaused(true)}
+              delayLongPress={200}
+            >
+              <View style={styles.tapZones}>
+                <Pressable
+                  style={styles.leftZone}
+                  onPress={() => {
+                    setIsPaused(false);
+                    goPrev();
+                  }}
+                  onLongPress={() => setIsPaused(true)}
+                  onPressOut={() => setIsPaused(false)}
+                />
+                <Pressable
+                  style={styles.rightZone}
+                  onPress={() => {
+                    setIsPaused(false);
+                    goNext();
+                  }}
+                  onLongPress={() => setIsPaused(true)}
+                  onPressOut={() => setIsPaused(false)}
+                />
+              </View>
+            </Pressable>
+            <LinearGradient colors={["rgba(0,0,0,0.7)", "transparent"]} style={[styles.viewerTopOverlay, { paddingTop: insets.top }]} />
+            <LinearGradient colors={["transparent", "rgba(0,0,0,0.8)"]} style={styles.viewerBottomOverlay} />
+
+            <View style={[styles.viewerHeaderRow, { top: 12 + insets.top }]}>
+              <View style={styles.viewerUser}>
+                <View style={styles.viewerAvatar} />
+                <View>
+                  <Text style={styles.viewerCred}>{activeStory.userName || `@${activeStory.userId.slice(0, 8)}`}</Text>
+                  <Text style={styles.viewerMeta}>
+                    Expires {new Date(activeStory.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.viewerHeaderActions}>
+                <TouchableOpacity
+                  onPress={() => {
+                    Alert.alert("Options", "Choose an action", [
+                      { text: "Cancel", style: "cancel" },
+                      {
+                        text: "Report story",
+                        onPress: () => Alert.alert("Reported", "Thanks. We will review this story."),
+                      },
+                      {
+                        text: "Block user",
+                        style: "destructive",
+                        onPress: () => Alert.alert("Blocked", "You won't see stories from this user."),
+                      },
+                    ]);
+                  }}
+                  style={styles.viewerMore}
+                >
+                  <Ionicons name="ellipsis-horizontal" size={22} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.viewerClose} onPress={() => setActiveStoryId(null)}>
+                  <Ionicons name="close" size={26} color="#fff" />
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {activeIndex > 0 && (
+              <TouchableOpacity style={[styles.viewerNav, { left: 16 }]} onPress={goPrev}>
+                <Ionicons name="chevron-back" size={26} color="#fff" />
+              </TouchableOpacity>
+            )}
+            {activeIndex < stories.length - 1 && (
+              <TouchableOpacity style={[styles.viewerNav, { right: 16 }]} onPress={goNext}>
+                <Ionicons name="chevron-forward" size={26} color="#fff" />
+              </TouchableOpacity>
+            )}
+            <View style={[styles.viewerHeader, { top: 8 + insets.top }]}>
+              <View>
+                <View style={styles.hiddenAvatar} />
+                <Text style={styles.viewerCred}>@{activeStory.userId.slice(0, 8)}</Text>
+                <Text style={styles.viewerMeta}>
+                  Expires {new Date(activeStory.expiresAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </Text>
               </View>
               <View style={styles.viewerMetaPill}>
@@ -130,7 +255,7 @@ const StoryRail = ({ onPressStory }: Props) => {
                 <Text style={styles.viewerMetaPillText}>{activeStory.views ?? 0} views</Text>
               </View>
             </View>
-            <View style={styles.viewerActions}>
+            <View style={[styles.viewerActions, { paddingBottom: 16 + insets.bottom }]}>
               {activeStory.isOwn ? (
                 <TouchableOpacity
                   style={styles.viewerCTASecondary}
@@ -165,9 +290,15 @@ const StoryRail = ({ onPressStory }: Props) => {
                 }}
               >
                 <Ionicons name="chatbubble-ellipses" size={18} color="#0b0f1f" />
-                <Text style={styles.viewerCTAText}>Message (credits apply)</Text>
+                <Text style={styles.viewerCTAText}>Message</Text>
               </TouchableOpacity>
             </View>
+            {isPaused ? (
+              <View style={[styles.pausedBadge, { top: 24 + insets.top }]}>
+                <Ionicons name="pause" size={14} color="#0b0f1f" />
+                <Text style={styles.pausedText}>Paused</Text>
+              </View>
+            ) : null}
           </View>
         ) : null}
       </Modal>
@@ -239,6 +370,30 @@ const styles = StyleSheet.create({
     width: Dimensions.get("window").width,
     height: Dimensions.get("window").height,
   },
+  viewerProgressTrack: {
+    position: "absolute",
+    top: 16,
+    left: 16,
+    right: 16,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.22)",
+    overflow: "hidden",
+  },
+  viewerProgressFill: {
+    height: "100%",
+    backgroundColor: "#5ce1ff",
+  },
+  tapZones: {
+    flex: 1,
+    flexDirection: "row",
+  },
+  leftZone: {
+    flex: 1,
+  },
+  rightZone: {
+    flex: 1,
+  },
   viewerTopOverlay: {
     position: "absolute",
     top: 0,
@@ -253,20 +408,37 @@ const styles = StyleSheet.create({
     right: 0,
     height: 240,
   },
-  viewerHeader: {
+  viewerHeaderRow: {
     position: "absolute",
-    top: 40,
-    left: 20,
-    right: 20,
+    left: 16,
+    right: 16,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
+  viewerUser: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  viewerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
   viewerClose: {
-    position: "absolute",
-    top: 32,
-    right: 16,
-    zIndex: 2,
+    padding: 8,
+  },
+  viewerHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  viewerMore: {
+    padding: 8,
   },
   viewerNav: {
     position: "absolute",
@@ -307,19 +479,39 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 12,
   },
+  pausedBadge: {
+    position: "absolute",
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  pausedText: {
+    color: "#0b0f1f",
+    fontWeight: "700",
+  },
   viewerCTA: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    paddingVertical: 14,
-    borderRadius: 14,
-    backgroundColor: "#4dabf7",
+    paddingVertical: 16,
+    borderRadius: 16,
+    backgroundColor: "#5ce1ff",
+    shadowColor: "#5ce1ff",
+    shadowOpacity: 0.35,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 16,
   },
   viewerCTAText: {
-    color: "#0b0f1f",
-    fontWeight: "700",
+    color: "#041025",
+    fontWeight: "800",
+    fontSize: 15,
   },
   viewerCTASecondary: {
     flexDirection: "row",

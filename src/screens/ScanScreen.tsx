@@ -101,7 +101,7 @@ const ScanScreen = () => {
       const venueId = resolveVenueId(data);
       if (!venueId) throw new Error("Unknown venue");
 
-      await checkInToVenue(venueId);
+      await checkInToVenue(venueId, undefined, { overrideProximity: true });
       track("check_in", { via: "qr", venueId });
       navigation.navigate("VenueDetails", { venueId });
     } catch (error) {
@@ -144,7 +144,7 @@ const ScanScreen = () => {
         return;
       }
 
-      await checkInToVenue(nearest.venue.id);
+      await checkInToVenue(nearest.venue.id, { latitude, longitude });
       track("check_in", { via: "geo", venueId: nearest.venue.id, distanceKm: nearest.distanceKm });
       navigation.navigate("VenueDetails", { venueId: nearest.venue.id });
     } catch (error) {

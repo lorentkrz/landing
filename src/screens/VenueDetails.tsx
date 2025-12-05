@@ -18,6 +18,7 @@ import { useRoute } from "@react-navigation/native";
 import Button from "../components/Button";
 import UserCard from "../components/UserCard";
 import { useVenues } from "../context/VenueContext";
+import * as Location from "expo-location";
 import { useCredits } from "../context/CreditsContext";
 import { useAuth } from "../context/AuthContext";
 import { useAppNavigation } from "../navigation/useAppNavigation";
@@ -27,7 +28,7 @@ import { ensureConversation } from "../utils/conversations";
 const VenueDetailsScreen = () => {
   const route = useRoute();
   const navigation = useAppNavigation();
-  const { getVenueById, checkInToVenue, activeCheckIn, fetchActiveUsersForVenue } = useVenues();
+  const { getVenueById, checkInToVenue, activeCheckIn, fetchActiveUsersForVenue, updateUserLocation } = useVenues();
   const { credits } = useCredits();
   const { user } = useAuth();
 
@@ -66,12 +67,20 @@ const VenueDetailsScreen = () => {
     if (!venue || !user?.id) return;
     setIsCheckingIn(true);
     try {
-      await checkInToVenue(venue.id);
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert("Location required", "Enable location to check in at this venue.");
+        return;
+      }
+      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+      const coords = { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+      updateUserLocation(coords);
+      await checkInToVenue(venue.id, coords);
       setIsCheckedIn(true);
       const guests = await fetchActiveUsersForVenue(venue.id);
       setActiveUsers(guests);
     } catch (error) {
-      Alert.alert("Check-in failed", "Unable to check in right now. Please try again.");
+      Alert.alert("Check-in failed", (error as Error).message);
     } finally {
       setIsCheckingIn(false);
     }
@@ -222,7 +231,7 @@ const VenueDetailsScreen = () => {
               <Ionicons name="lock-closed" size={24} color="#fff" />
               <Text style={styles.lockedTitle}>Guest list hidden</Text>
               <Text style={styles.lockedSubtitle}>Check in with the QR code at the entrance to see who is inside.</Text>
-              <Button title="How to check in" onPress={() => navigation.navigate("Scan")} size="small" />
+              <Button title="How to check in" onPress={() => navigation.navigate("HowToCheckIn")} size="small" />
             </View>
           )}
         </View>

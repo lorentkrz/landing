@@ -28,7 +28,7 @@ type MessageItem = {
   text: string;
   isUser: boolean;
   timestamp: Date;
-  status?: "sent" | "delivered" | "read";
+  status?: "pending" | "sent" | "delivered" | "read" | "failed";
 };
 
 const ChatScreen = () => {
@@ -127,21 +127,27 @@ const ChatScreen = () => {
     const text = inputText.trim();
     setInputText("");
     const tempId = Date.now().toString();
-    setMessages((prev) => [...prev, { id: tempId, text, isUser: true, timestamp: new Date(), status: "sent" }]);
-    const { error } = await supabase.from("messages").insert({
-      conversation_id: conversationId,
-      sender_id: user.id,
-      receiver_id: userId,
-      body: text,
-    });
-    if (error) {
-      Alert.alert("Failed to send", "Please try again.");
-      return;
+    setMessages((prev) => [...prev, { id: tempId, text, isUser: true, timestamp: new Date(), status: "pending" }]);
+    try {
+      const { error } = await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: user.id,
+        receiver_id: userId,
+        body: text,
+      });
+      if (error) {
+        console.warn("Message send failed", error);
+        setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...msg, status: "failed" } : msg)));
+        return;
+      }
+      setMessages((prev) =>
+        prev.map((msg) => (msg.id === tempId ? { ...msg, status: "delivered" } : msg)),
+      );
+      track("message_send", { conversationId, targetUser: userId });
+    } catch (err) {
+      console.warn("Message send error", err);
+      setMessages((prev) => prev.map((msg) => (msg.id === tempId ? { ...msg, status: "failed" } : msg)));
     }
-    setMessages((prev) =>
-      prev.map((msg) => (msg.id === tempId ? { ...msg, status: "delivered" } : msg)),
-    );
-    track("message_send", { conversationId, targetUser: userId });
   };
 
   const handleExtendTime = async () => {
@@ -171,11 +177,35 @@ const ChatScreen = () => {
           {item.isUser && (
             <View style={styles.statusPill}>
               <Ionicons
-                name={item.status === "read" ? "checkmark-done" : "checkmark"}
+                name={
+                  item.status === "failed"
+                    ? "alert-circle"
+                    : item.status === "pending"
+                      ? "time"
+                      : item.status === "read"
+                        ? "checkmark-done"
+                        : "checkmark"
+                }
                 size={12}
-                color={item.status === "read" ? "#b8f7ff" : "#d7e7ff"}
+                color={
+                  item.status === "failed"
+                    ? "#ff7b7b"
+                    : item.status === "pending"
+                      ? "#d7e7ff"
+                      : item.status === "read"
+                        ? "#b8f7ff"
+                        : "#d7e7ff"
+                }
               />
-              <Text style={styles.statusText}>{item.status ?? "sent"}</Text>
+              <Text
+                style={[
+                  styles.statusText,
+                  item.status === "failed" && { color: "#ff7b7b" },
+                  item.status === "pending" && { color: "#d7e7ff" },
+                ]}
+              >
+                {item.status ?? "sent"}
+              </Text>
             </View>
           )}
         </View>

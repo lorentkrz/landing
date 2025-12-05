@@ -21,6 +21,7 @@ import * as ImagePicker from "expo-image-picker";
 import Button from "../components/Button";
 import { useAppNavigation } from "../navigation/useAppNavigation";
 import { useAuth } from "../context/AuthContext";
+import * as Linking from "expo-linking";
 
 const RegisterScreen = () => {
   const navigation = useAppNavigation();
@@ -38,12 +39,14 @@ const RegisterScreen = () => {
   const [isDatePickerVisible, setIsDatePickerVisible] = useState(false);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [referralCode, setReferralCode] = useState("");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const isFormValid =
     !!firstName.trim() &&
     !!lastName.trim() &&
     /\S+@\S+\.\S+/.test(email.trim()) &&
     password.length >= 6 &&
-    !!birthdateLabel;
+    !!birthdateLabel &&
+    acceptedTerms;
 
   const ageMinimumDate = useMemo(() => {
     const date = new Date();
@@ -87,7 +90,7 @@ const RegisterScreen = () => {
     if (!validate()) return;
 
     try {
-      const { needsVerification, email: registeredEmail } = await register({
+      const { email: registeredEmail } = await register({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         email: email.trim(),
@@ -97,26 +100,12 @@ const RegisterScreen = () => {
         birthdate: birthdate.toISOString().split("T")[0],
         referralCode: referralCode.trim(),
       });
-      if (needsVerification) {
-        Alert.alert(
-          "Enter your code",
-          `We sent a 6-digit code to ${registeredEmail}. Enter it to activate your account.`,
-          [
-            {
-              text: "Continue",
-              onPress: () => navigation.navigate("VerifyEmail", { email: registeredEmail }),
-            },
-          ],
-        );
-      } else {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "MainTabs" as never }],
-        });
-      }
+
+      // Force the email verification flow regardless of session state.
+      navigation.navigate("VerifyEmail", { email: registeredEmail });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Registration failed. Please try again.";
-      Alert.alert("Registration failed", message);
+      const message = error instanceof Error ? error.message : "Registration failed.";
+      Alert.alert("Registration Error", message);
     }
   };
 
@@ -294,9 +283,23 @@ const RegisterScreen = () => {
             </View>
 
             <View style={styles.termsRow}>
-              <Ionicons name="shield-checkmark-outline" size={18} color="#4dabf7" />
+              <TouchableOpacity onPress={() => setAcceptedTerms((prev) => !prev)} style={styles.checkbox}>
+                {acceptedTerms ? (
+                  <Ionicons name="checkbox" size={20} color="#4dabf7" />
+                ) : (
+                  <Ionicons name="square-outline" size={20} color="#6c7495" />
+                )}
+              </TouchableOpacity>
               <Text style={styles.termsCopy}>
-                By creating an account you agree to our Terms of Service and Privacy Policy.
+                I agree to the{" "}
+                <Text style={styles.link} onPress={() => Linking.openURL("https://nata.app/terms")}>
+                  Terms
+                </Text>{" "}
+                and{" "}
+                <Text style={styles.link} onPress={() => Linking.openURL("https://nata.app/privacy")}>
+                  Privacy Policy
+                </Text>
+                .
               </Text>
             </View>
 
@@ -496,10 +499,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 4,
   },
+  checkbox: {
+    padding: 4,
+  },
   termsCopy: {
     color: "#8c93b5",
     flex: 1,
     fontSize: 13,
+  },
+  link: {
+    color: "#4dabf7",
+    fontWeight: "700",
   },
   loginRow: {
     flexDirection: "row",

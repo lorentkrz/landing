@@ -23,6 +23,7 @@ import { useAuth } from "../context/AuthContext";
 import { useVenues } from "../context/VenueContext";
 import { supabase } from "../lib/supabase";
 import { profileRowToUser } from "../utils/profile";
+import EmptyState from "../components/EmptyState";
 
 const TABS = [
   { id: "all", label: "All" },
@@ -110,13 +111,14 @@ const MessagesScreen = () => {
     return filtered;
   }, [conversations, activeTab, searchQuery]);
 
-  const EmptyState = () => (
-    <View style={styles.emptyState}>
-      <Ionicons name="chatbubble-ellipses-outline" size={38} color="#7f88b8" />
-      <Text style={styles.emptyTitle}>No conversations yet</Text>
-      <Text style={styles.emptySubtitle}>Scan a venue or reach out from Contacts to start talking.</Text>
-      <Button title="Browse contacts" onPress={() => navigation.navigate("Contacts")} size="small" style={styles.emptyButton} />
-    </View>
+  const renderEmpty = () => (
+    <EmptyState
+      icon="chatbubble-ellipses-outline"
+      title="Say hello!"
+      description="No conversations yet. Start a chat or browse contacts."
+      ctaLabel="Browse contacts"
+      onPress={() => navigation.navigate("Contacts")}
+    />
   );
 
   const activeVenue = useMemo(
@@ -135,7 +137,7 @@ const MessagesScreen = () => {
     }
 
     if (filteredConversations.length === 0) {
-      return <EmptyState />;
+      return renderEmpty();
     }
 
     return filteredConversations.map((conversation) => (
